@@ -36,7 +36,8 @@ public final class TeamHooks implements TeamsApi.Listener {
     @Override
     public void onDisbanded(UUID team) {
         ClaimSync.accessChanged();
-        if (ClaimsServer.running()) ClaimsServer.service().disbanded(team, Commands.teamName(ClaimsServer.service(), team).getString());
+        String name = Membership.disbanded(team);
+        if (ClaimsServer.running()) ClaimsServer.service().disbanded(team, name != null ? name : Commands.teamName(ClaimsServer.service(), team).getString());
         ClaimsServer.loaderDirty();
     }
 

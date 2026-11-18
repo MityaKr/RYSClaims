@@ -124,6 +124,7 @@ public final class ClaimsServer {
             Loader.sync(srv, s);
         }
         ClaimSync.tick(srv, s);
+        Membership.flush();
     }
 
     /**

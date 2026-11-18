@@ -52,13 +52,47 @@ public final class Membership {
     }
 
     /** Игрок ушёл: предложить забрать чанки, которые он принёс. */
+    /** Вопросы «забрать свои чанки», отложенные до конца тика: при роспуске RYSTeams зовёт {@code onLeft} раньше {@code onDisbanded}. */
+    private static final java.util.List<UUID[]> ASK = new java.util.ArrayList<>();
+    /** Имя команды, пока она есть: при роспуске {@code onDisbanded} приходит уже после удаления команды. */
+    private static final Map<UUID, String> NAMES = new HashMap<>();
+
     static void left(UUID team, UUID player) {
         if (!ClaimsServer.running() || team.equals(player)) return;
         ClaimService s = ClaimsServer.service();
+        NAMES.put(team, Commands.teamName(s, team).getString());
         int n = 0;
         for (var l : s.broughtBy(team, player).values()) n += l.size();
         if (n == 0) return;
         LEFT.put(player, new Left(team, System.currentTimeMillis()));
+        ASK.add(new UUID[] {team, player});
+    }
+
+    /**
+     * Команда распалась (перепроверка 18.11, пункт 13): вопросов «забрать» её участникам нет, вся её земля и так
+     * освобождается неделю. Возвращает имя команды, запомненное до удаления (или null).
+     */
+    static String disbanded(UUID team) {
+        ASK.removeIf(a -> a[0].equals(team));
+        LEFT.values().removeIf(l -> l.team().equals(team));
+        return NAMES.remove(team);
+    }
+
+    /** Конец тика: отложенные вопросы уходят игрокам. */
+    static void flush() {
+        if (!NAMES.isEmpty()) NAMES.clear();
+        if (ASK.isEmpty()) return;
+        java.util.List<UUID[]> list = new java.util.ArrayList<>(ASK);
+        ASK.clear();
+        if (!ClaimsServer.running()) return;
+        for (UUID[] a : list) ask(a[0], a[1]);
+    }
+
+    private static void ask(UUID team, UUID player) {
+        ClaimService s = ClaimsServer.service();
+        int n = 0;
+        for (var l : s.broughtBy(team, player).values()) n += l.size();
+        if (n == 0) return;
         MinecraftServer server = ClaimsServer.server();
         ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(player);
         if (p == null) return;
