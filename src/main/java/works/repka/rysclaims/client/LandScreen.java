@@ -422,7 +422,11 @@ public final class LandScreen extends ScaledScreen {
     private void label(GuiGraphics g, Theme canvas, UUID team, long chunk, ClaimsNet.Hello h) {
         LandCache.TeamInfo info = LandCache.team(team);
         if (info == null) return;
-        String name = Draw.ellipsize(info.name().isEmpty() ? Words.t("screen.taken") : info.name(), 90, 11.5f, Weight.SEMIBOLD);
+        LocalPlayer me = Minecraft.getInstance().player;
+        // своя личная земля, пока игрок в команде (ответ «Оставить себе», макет 45)
+        boolean personal = me != null && team.equals(me.getUUID()) && !team.equals(h.team());
+        String shownName = personal ? Words.t("screen.personal") : info.name().isEmpty() ? Words.t("screen.taken") : info.name();
+        String name = Draw.ellipsize(shownName, 90, 11.5f, Weight.SEMIBOLD);
         float tw = Draw.labelWidth(name, 11.5f, Weight.SEMIBOLD);
         float w = 4 + 4 + 3 + tw + 4, hh = 9;
         float x = (float) screenX(Chunks.x(chunk) * 16);

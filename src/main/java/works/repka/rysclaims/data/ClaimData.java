@@ -316,6 +316,20 @@ public final class ClaimData {
         changes.all();
     }
 
+    /** Запись архива: распавшаяся команда (план, раздел 8), хранится 7 дней. */
+    public void archive(CompoundTag entry) {
+        archive.add(entry);
+    }
+
+    public ListTag archive() {
+        return archive;
+    }
+
+    /** Убирает из архива записи старше {@code border} (мс от эпохи). */
+    public boolean pruneArchive(long border) {
+        return archive.removeIf(t -> t instanceof CompoundTag c && c.getLong("at") < border);
+    }
+
     /** Отмечает правку земли игроком или оператором (не переездом). */
     public void edited() {
         edits++;
@@ -361,6 +375,7 @@ public final class ClaimData {
             CompoundTag b = new CompoundTag();
             b.putInt("bonusClaims", e.getValue().claims);
             b.putInt("bonusForce", e.getValue().force);
+            if (e.getValue().keepPersonal) b.putBoolean("keepPersonal", true);
             p.put(e.getKey().toString(), b);
         }
         tag.put("players", p);
@@ -410,7 +425,9 @@ public final class ClaimData {
             UUID id = uuid(key);
             if (id == null) continue;
             CompoundTag b = players.getCompound(key);
-            data.players.put(id, new PlayerBonus(b.getInt("bonusClaims"), b.getInt("bonusForce")));
+            PlayerBonus pb = new PlayerBonus(b.getInt("bonusClaims"), b.getInt("bonusForce"));
+            pb.keepPersonal = b.getBoolean("keepPersonal");
+            data.players.put(id, pb);
         }
         data.archive = tag.getList("archive", Tag.TAG_COMPOUND).copy();
         for (Tag x : tag.getList("homes", Tag.TAG_COMPOUND)) {

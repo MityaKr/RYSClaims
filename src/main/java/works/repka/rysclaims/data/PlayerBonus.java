@@ -4,6 +4,8 @@ package works.repka.rysclaims.data;
 public final class PlayerBonus {
     public int claims;
     public int force;
+    /** Игрок ответил «Оставить себе» на вопрос о личной земле при вступлении (макет 45): больше не спрашивать. */
+    public boolean keepPersonal;
 
     public PlayerBonus(int claims, int force) {
         this.claims = claims;
@@ -11,6 +13,6 @@ public final class PlayerBonus {
     }
 
     boolean isEmpty() {
-        return claims == 0 && force == 0;
+        return claims == 0 && force == 0 && !keepPersonal;
     }
 }

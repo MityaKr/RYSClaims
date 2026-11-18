@@ -52,6 +52,26 @@ public final class DenyFeedback {
             .title(Component.translatableWithFallback("rysclaims.alert.title", "Stranger on team land: %s", name).getString()).note(note));
     }
 
+    /**
+     * Вопрос сервера кнопками (план, раздел 8): при вступлении «Отдать личную землю команде?» (макет 45), при уходе «Забрать
+     * свои чанки?». Ответ уходит пакетом {@code Answer}; без ответа земля остаётся личной, вопрос придёт при следующем входе.
+     */
+    public static void question(works.repka.rysclaims.net.ClaimsNet.Question q) {
+        boolean join = q.kind() == 0;
+        String title = join ? Words.t("question.join.title", Words.chunks(q.count())) : Words.t("question.leave.title", Words.chunks(q.count()));
+        String note = join ? Words.t(q.fits() ? "question.join.note" : "question.join.no_room", q.team()) : Words.t("question.leave.note", q.team());
+        Notice n = Notice.buttons(Notice.CLAIMS, join ? "question_join" : "question_leave").icon(Icons.Shape.SHIELD).title(title).note(note)
+            .millis(join ? 60_000 : 120_000);
+        if (join) {
+            n.button(Words.t("question.join.keep"), false, () -> LandCache.send(new works.repka.rysclaims.net.ClaimsNet.Answer(0, false)));
+            if (q.fits()) n.button(Words.t("question.join.give"), true, () -> LandCache.send(new works.repka.rysclaims.net.ClaimsNet.Answer(0, true)));
+        } else {
+            n.button(Words.t("question.leave.no"), false, () -> {});
+            n.button(Words.t("question.leave.take"), true, () -> LandCache.send(new works.repka.rysclaims.net.ClaimsNet.Answer(1, true)));
+        }
+        Notices.show(n);
+    }
+
     public static Component text(String reason) {
         return Component.translatableWithFallback("rysclaims.deny." + reason, "You cannot do this here");
     }

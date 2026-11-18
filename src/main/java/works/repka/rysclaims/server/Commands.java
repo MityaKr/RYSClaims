@@ -80,6 +80,10 @@ public final class Commands {
             .then(lit("always").executes(c -> loadMode(c, Settings.LoadMode.ALWAYS))));
         root.then(lit("info").executes(Commands::info));
         root.then(lit("list").executes(c -> list(c, own(c))));
+        root.then(lit("personal")
+            .then(lit("give").executes(c -> answer(c, Membership.JOIN, true)))
+            .then(lit("keep").executes(c -> answer(c, Membership.JOIN, false))));
+        root.then(lit("take").executes(c -> answer(c, Membership.LEAVE, true)));
         root.then(lit("name").executes(c -> rename(c, ""))
             .then(net.minecraft.commands.Commands.argument("name", StringArgumentType.greedyString())
                 .executes(c -> rename(c, StringArgumentType.getString(c, "name")))));
@@ -345,6 +349,15 @@ public final class Commands {
             if (s.bypass(id)) can.append(" · ").append(Msg.t("info.bypass", "operator mode: protection off"));
             src.sendSuccess(() -> can.withStyle(ChatFormatting.GRAY), false);
         }
+        return 1;
+    }
+
+    /** Ответ на вопрос о личной земле или «забрать свои чанки». */
+    private static int answer(CommandContext<CommandSourceStack> c, int kind, boolean yes) throws CommandSyntaxException {
+        service();
+        UUID player = c.getSource().getPlayerOrException().getUUID();
+        Component result = Membership.answer(player, kind, yes);
+        c.getSource().sendSuccess(() -> result, false);
         return 1;
     }
 

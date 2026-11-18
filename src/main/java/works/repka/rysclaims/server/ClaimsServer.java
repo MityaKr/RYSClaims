@@ -70,6 +70,7 @@ public final class ClaimsServer {
         ClaimSync.clear();
         Alerts.clear();
         Feed.clear();
+        Membership.clear();
         server = null;
         saved = null;
         service = null;
@@ -110,6 +111,7 @@ public final class ClaimsServer {
             if (ticks % LOG_PRUNE_TICKS == 0) l.prune(s.settings().logDays);
         }
         if (ticks % 200 == 0) Feed.flush(srv);
+        if (ticks % 1200 == 600) s.overLimitTick();
         if (loaderDirty || ticks % 200 == 0) {
             loaderDirty = false;
             Loader.sync(srv, s);
@@ -132,6 +134,7 @@ public final class ClaimsServer {
         }
         loaderDirty = true;
         ClaimSync.login(player);
+        Membership.login(player);
     }
 
     /** Пишет файл земли сейчас, а не при очередном сохранении мира: переезд делает необратимое только после записи. */

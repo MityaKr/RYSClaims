@@ -42,6 +42,14 @@ public final class FakeTeams implements Teams {
         return this;
     }
 
+    /** Игрок ушёл из команды и стал соло. */
+    public FakeTeams leave(UUID player) {
+        UUID team = teamOf.remove(player);
+        if (team != null && members.containsKey(team)) members.get(team).remove(player);
+        role.remove(player);
+        return this;
+    }
+
     public FakeTeams role(UUID player, String r) {
         role.put(player, r);
         return this;

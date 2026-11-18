@@ -408,6 +408,34 @@ public final class ClaimsNet {
         }
     }
 
+    /**
+     * Вопрос игроку уведомлением с двумя кнопками: {@code kind} 0 «Отдать личную землю команде?» при вступлении (макет 45),
+     * 1 «Забрать свои чанки?» при уходе; сколько чанков, хватает ли лимита, имя команды.
+     */
+    public record Question(int kind, int count, boolean fits, String team) implements CustomPacketPayload {
+        public static final Type<Question> TYPE = new Type<>(ClaimsNet.id("question"));
+        public static final StreamCodec<ByteBuf, Question> CODEC = StreamCodec.composite(
+            ByteBufCodecs.VAR_INT, Question::kind, ByteBufCodecs.VAR_INT, Question::count, ByteBufCodecs.BOOL, Question::fits,
+            ByteBufCodecs.stringUtf8(64), Question::team, Question::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Ответ на {@link Question}. */
+    public record Answer(int kind, boolean yes) implements CustomPacketPayload {
+        public static final Type<Answer> TYPE = new Type<>(ClaimsNet.id("answer"));
+        public static final StreamCodec<ByteBuf, Answer> CODEC = StreamCodec.composite(
+            ByteBufCodecs.VAR_INT, Answer::kind, ByteBufCodecs.BOOL, Answer::yes, Answer::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     // ---- серверу ----
 
     /** Подписка: измерение и регионы (упакованы как чанк). Больше {@link #MAX_REGIONS} сервер не держит. */
@@ -537,12 +565,14 @@ public final class ClaimsNet {
         r.playToClient(LandState.TYPE, LandState.CODEC, (p, c) -> client(() -> Client.state(p)));
         r.playToClient(OwnerAlert.TYPE, OwnerAlert.CODEC, (p, c) -> client(() -> Client.alert(p)));
         r.playToClient(LogPage.TYPE, LogPage.CODEC, (p, c) -> client(() -> Client.log(p)));
+        r.playToClient(Question.TYPE, Question.CODEC, (p, c) -> client(() -> Client.question(p)));
         r.playToServer(Subscribe.TYPE, Subscribe.CODEC, (p, c) -> server(c, pl -> ClaimSync.subscribe(pl, p)));
         r.playToServer(Edit.TYPE, Edit.CODEC, (p, c) -> server(c, pl -> ClaimSync.edit(pl, p)));
         r.playToServer(Keep.TYPE, Keep.CODEC, (p, c) -> server(c, ClaimSync::keep));
         r.playToServer(RightsEdit.TYPE, RightsEdit.CODEC, (p, c) -> server(c, pl -> ClaimSync.rights(pl, p)));
         r.playToServer(LandEdit.TYPE, LandEdit.CODEC, (p, c) -> server(c, pl -> ClaimSync.land(pl, p)));
         r.playToServer(LogRequest.TYPE, LogRequest.CODEC, (p, c) -> server(c, ClaimSync::log));
+        r.playToServer(Answer.TYPE, Answer.CODEC, (p, c) -> server(c, pl -> works.repka.rysclaims.server.Membership.onAnswer(pl, p)));
     }
 
     private static void client(Runnable r) {
@@ -589,6 +619,10 @@ public final class ClaimsNet {
 
         static void log(LogPage p) {
             works.repka.rysclaims.client.LandCache.log(p);
+        }
+
+        static void question(Question q) {
+            works.repka.rysclaims.client.DenyFeedback.question(q);
         }
     }
 

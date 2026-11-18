@@ -20,6 +20,7 @@ import works.repka.rysclaims.data.Chunks;
 import works.repka.rysclaims.data.Claim;
 import works.repka.rysclaims.data.ClaimData;
 import works.repka.rysclaims.data.Limits;
+import works.repka.rysclaims.data.PlayerBonus;
 import works.repka.rysclaims.data.Plot;
 import works.repka.rysclaims.data.Plots;
 import works.repka.rysclaims.data.Rights;
@@ -727,13 +728,146 @@ public final class ClaimService {
 
     // ---- события команд ----
 
-    /** Игрок вступил: его личная земля переходит команде, если хватает лимита (0.1), иначе остаётся личной. */
+    /** Сколько живёт отсчёт освобождения земли распавшейся команды и лишней земли после слияния, и запись архива. */
+    public static final long WEEK_MS = 7L * 24 * 3600 * 1000;
+    /** Сколько после ухода можно забрать свои чанки. */
+    public static final long TAKE_MS = 3600_000L;
+
+    /**
+     * Отдать личную землю команде (ответ «Отдать» на вопрос {@code 45}, {@code /claims personal give}): переходит вся, если
+     * хватает лимита команды, иначе остаётся личной.
+     */
     public boolean joined(UUID team, UUID player) {
         if (team.equals(player) || data.claimed(player) == 0) return false;
         if (data.claimed(team) + data.claimed(player) > limits(team).claims) return false;
         var moved = data.transfer(player, team);
+        PlayerBonus b = data.bonus(player);
+        if (b != null) b.keepPersonal = false;
         after(player, team, moved);
         return true;
+    }
+
+    /** Нужен ли игроку вопрос о личной земле (макет 45): он в команде, у него есть личная земля, и он не сказал «Оставить». */
+    public boolean personalPending(UUID player) {
+        if (teams.teamOf(player).equals(player) || data.claimed(player) == 0) return false;
+        PlayerBonus b = data.bonus(player);
+        return b == null || !b.keepPersonal;
+    }
+
+    /** «Оставить себе»: земля остаётся личной и закрыта для правок, пока игрок в команде. */
+    public void keepPersonal(UUID player) {
+        data.bonusOrCreate(player).keepPersonal = true;
+        hooks.dirty();
+    }
+
+    /** Чанки команды, которые принёс игрок (поле {@code by}): их можно забрать при уходе (план, раздел 8). */
+    public Map<String, LongList> broughtBy(UUID team, UUID player) {
+        Map<String, LongList> out = new LinkedHashMap<>();
+        for (String dim : data.dimensions()) {
+            for (Long2ObjectMap.Entry<Claim> e : data.claims(dim).long2ObjectEntrySet()) {
+                Claim c = e.getValue();
+                if (c.team().equals(team) && player.equals(c.by()) && !c.releasing()) out.computeIfAbsent(dim, d -> new LongArrayList()).add(e.getLongKey());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * «Забрать свои чанки»: ушедший игрок забирает у бывшей команды чанки, которые принёс сам, в пределах своего личного
+     * лимита. Возвращает, сколько забрано.
+     */
+    public int takeBack(UUID player, UUID fromTeam) {
+        if (fromTeam.equals(player) || teams.teamOf(player).equals(fromTeam)) return 0;
+        UUID to = teams.teamOf(player);
+        int room = limits(to).claims - data.claimed(to);
+        int n = 0;
+        Map<String, LongList> moved = new LinkedHashMap<>();
+        for (Map.Entry<String, LongList> e : broughtBy(fromTeam, player).entrySet()) {
+            for (long chunk : e.getValue()) {
+                if (n >= room) break;
+                data.reassign(e.getKey(), chunk, to);
+                moved.computeIfAbsent(e.getKey(), d -> new LongArrayList()).add(chunk);
+                n++;
+            }
+        }
+        if (n > 0) {
+            data.edited();
+            after(fromTeam, to, moved);
+        }
+        return n;
+    }
+
+    /** Строка предпросмотра слияния (план, раздел 8): сколько земли перейдёт и хватит ли лимита. Второе число: нехватка. */
+    public int[] mergePreview(UUID from, UUID into) {
+        int n = data.claimed(from);
+        int over = data.claimed(into) + n - limits(into).claims;
+        return new int[] {n, Math.max(0, over)};
+    }
+
+    /**
+     * Распад (план, раздел 8): вся земля освобождается с отсчётом 7 дней, защита и лимит держатся до конца, запись в архиве
+     * на те же 7 дней. Управлять такой землёй может только оператор.
+     */
+    public void disbanded(UUID team, String name) {
+        long at = clock.getAsLong();
+        int n = 0;
+        for (String dim : data.dimensions()) {
+            for (Long2ObjectMap.Entry<Claim> e : data.claims(dim).long2ObjectEntrySet()) {
+                Claim c = e.getValue();
+                if (!c.team().equals(team) || c.releasing()) continue;
+                data.setRelease(c, at + WEEK_MS);
+                pending.computeIfAbsent(dim, d -> new LongOpenHashSet()).add(e.getLongKey());
+                n++;
+            }
+        }
+        if (n == 0) return;
+        net.minecraft.nbt.CompoundTag entry = new net.minecraft.nbt.CompoundTag();
+        entry.putUUID("team", team);
+        entry.putString("name", name);
+        entry.putLong("at", at);
+        entry.putInt("chunks", n);
+        data.archive(entry);
+        hooks.forceChanged(team);
+        hooks.dirty();
+    }
+
+    /**
+     * Раз в минуту: земля больше лимита (после слияния) держится 7 дней, потом лишнее освобождается с обычным отсчётом,
+     * сначала самые новые чанки без прогрузки. Архив чистится от записей старше 7 дней.
+     */
+    public void overLimitTick() {
+        long now = clock.getAsLong();
+        if (data.pruneArchive(now - WEEK_MS)) hooks.dirty();
+        for (TeamLand land : data.lands().values()) {
+            if (land.claimed() == 0 && land.overSince == 0) continue;
+            int limit = limits(land.id).claims;
+            int over = land.claimed() - limit;
+            if (over <= 0) {
+                if (land.overSince != 0) {
+                    land.overSince = 0;
+                    hooks.dirty();
+                }
+                continue;
+            }
+            if (land.overSince == 0) {
+                land.overSince = now;
+                hooks.dirty();
+                continue;
+            }
+            if (now - land.overSince < WEEK_MS) continue;
+            for (String dim : data.dimensions()) {
+                java.util.List<Claim> mine = new java.util.ArrayList<>();
+                for (Claim c : data.claims(dim).values()) if (c.team().equals(land.id) && !c.releasing()) mine.add(c);
+                mine.sort((a, b) -> a.force() != b.force() ? Boolean.compare(a.force(), b.force()) : Long.compare(b.at(), a.at()));
+                LongList pick = new LongArrayList();
+                for (int i = 0; i < mine.size() && pick.size() < over; i++) pick.add(mine.get(i).pos());
+                over -= pick.size();
+                if (!pick.isEmpty()) release(null, land.id, dim, pick, true);
+                if (over <= 0) break;
+            }
+            land.overSince = 0;
+            hooks.dirty();
+        }
     }
 
     /** Слияние: вся земля и добавка уходящей команды переходит принимающей. Отмена в течение 30 секунд возвращает. */

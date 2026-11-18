@@ -345,4 +345,52 @@ class ClaimServiceTest {
         assertFalse(service.editsRights(LEADER, TEAM, false));
         assertTrue(service.editsRights(null, TEAM, true));
     }
+
+    /** З11: вопрос о личной земле, «Оставить себе», «Забрать свои чанки» по полю by, распад на 7 дней, лишнее после слияния. */
+    @Test
+    void membershipRules() {
+        UUID newbie = UUID.fromString("00000000-0000-0000-0000-000000000009");
+        service.claim(newbie, newbie, OW, Chunks.square(20, 20, 1), false);
+        teams.join(TEAM, newbie, "member");
+        assertTrue(service.personalPending(newbie));
+        service.keepPersonal(newbie);
+        assertFalse(service.personalPending(newbie), "ответ «Оставить» больше не спрашивается");
+        assertTrue(ClaimData.load(data.save(), settings.defaultRights).bonus(newbie).keepPersonal, "ответ переживает перезапуск");
+        assertTrue(service.joined(TEAM, newbie), "передумал: «Отдать» через команду");
+        assertFalse(service.personalPending(newbie));
+
+        // принесённое новичком помечено by; уйдя, он его забирает
+        service.claim(newbie, TEAM, OW, one(40, 40), false);
+        assertEquals(10, service.broughtBy(TEAM, newbie).get(OW).size(), "отданная личная земля тоже его");
+        teams.leave(newbie);
+        assertEquals(10, service.takeBack(newbie, TEAM));
+        assertEquals(newbie, data.owner(OW, Chunks.pack(40, 40)));
+
+        // распад: отсчёт 7 дней, защита держится
+        service.claim(LEADER, TEAM, OW, one(60, 60), false);
+        service.disbanded(TEAM, "Team");
+        assertTrue(data.get(OW, Chunks.pack(60, 60)).releasing());
+        now += ClaimService.WEEK_MS - 1000;
+        service.tick();
+        assertEquals(TEAM, data.owner(OW, Chunks.pack(60, 60)), "через 6 дней земля ещё держится");
+        assertEquals(1, data.archive().size());
+        now += 2000;
+        service.tick();
+        assertNull(data.owner(OW, Chunks.pack(60, 60)));
+    }
+
+    @Test
+    void overLimitAfterMergeStaysAWeek() {
+        settings.claimsPerTeam = 10;
+        service.claim(LEADER, TEAM, OW, Chunks.square(0, 0, 1), false); // 9
+        service.claim(ALLY, OTHER, OW, Chunks.square(10, 10, 1), false); // 9
+        assertEquals(8, service.mergePreview(OTHER, TEAM)[1]);
+        service.merged(OTHER, TEAM);
+        service.overLimitTick();
+        assertTrue(data.land(TEAM).overSince > 0);
+        assertEquals(0, service.claim(LEADER, TEAM, OW, one(30, 30), false).done, "сверх лимита занимать нельзя");
+        now += ClaimService.WEEK_MS + 1;
+        service.overLimitTick();
+        assertEquals(8, service.releasing(TEAM)[0], "через неделю лишнее освобождается с отсчётом");
+    }
 }
