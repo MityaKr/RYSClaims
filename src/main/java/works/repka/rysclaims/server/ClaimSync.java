@@ -433,9 +433,8 @@ public final class ClaimSync {
                 switch (e.kind()) {
                     case ClaimsNet.LAND_TRUST, ClaimsNet.LAND_UNTRUST -> {
                         UUID who = profile(player.server, e.text());
-                        if (who == null || who.equals(id)) r.skipped.put(ClaimService.Skip.NOT_FOUND, 1);
-                        else if (s.trust(team, who, e.kind() == ClaimsNet.LAND_TRUST)) r.done = 1;
-                        else r.skipped.put(ClaimService.Skip.ALREADY, 1);
+                        if (who == null && lookupLater(player, e)) return;
+                        trusted(s, r, id, team, who, e.kind() == ClaimsNet.LAND_TRUST);
                     }
                     case ClaimsNet.LAND_FLAG -> {
                         TeamLand.Flag[] flags = TeamLand.Flag.values();
@@ -511,7 +510,13 @@ public final class ClaimSync {
         return new ClaimsNet.LogPage(land == null || land.logFeed, land != null && land.logToast, edit, s.settings().logDays, lines);
     }
 
-    /** Игрок по нику (в сети или в кэше профилей) или по UUID строкой. */
+    private static void trusted(ClaimService s, ClaimService.Result r, UUID id, UUID team, @Nullable UUID who, boolean on) {
+        if (who == null || who.equals(id)) r.skipped.put(ClaimService.Skip.NOT_FOUND, 1);
+        else if (s.trust(team, who, on)) r.done = 1;
+        else r.skipped.put(ClaimService.Skip.ALREADY, 1);
+    }
+
+    /** Игрок по UUID строкой или по нику в сети; кэш профилей и Mojang спрашиваются отдельно ({@link #lookupLater}). */
     private static @Nullable UUID profile(MinecraftServer server, String text) {
         String t = text.trim();
         if (t.isEmpty()) return null;
@@ -521,9 +526,37 @@ public final class ClaimSync {
             // ник
         }
         ServerPlayer online = server.getPlayerList().getPlayerByName(t);
-        if (online != null) return online.getUUID();
-        var cache = server.getProfileCache();
-        return cache == null ? null : cache.get(t).map(com.mojang.authlib.GameProfile::getId).orElse(null);
+        return online == null ? null : online.getUUID();
+    }
+
+    /**
+     * Незнакомый ник: {@code GameProfileCache.getAsync} в фоне (для ника не из кэша это запрос к Mojang, раньше он шёл
+     * синхронно в главном потоке, перепроверка 18.11, пункт 8), итог применяется в главном потоке с проверкой права заново.
+     * false: спросить негде (нет кэша или исполнителя), ник не найден.
+     */
+    private static boolean lookupLater(ServerPlayer player, ClaimsNet.LandEdit e) {
+        var cache = player.server.getProfileCache();
+        String name = e.text().trim();
+        if (cache == null || name.isEmpty() || name.length() > 16) return false;
+        java.util.concurrent.CompletableFuture<java.util.Optional<com.mojang.authlib.GameProfile>> f;
+        try {
+            f = cache.getAsync(name);
+        } catch (IllegalStateException noExecutor) {
+            return false;
+        }
+        boolean on = e.kind() == ClaimsNet.LAND_TRUST;
+        f.thenAcceptAsync(p -> {
+            if (!ClaimsServer.running() || player.hasDisconnected()) return;
+            ClaimService s = ClaimsServer.service();
+            UUID id = player.getUUID();
+            UUID team = s.teams().teamOf(id);
+            ClaimService.Result r = new ClaimService.Result();
+            if (!s.editsRights(id, team, s.bypass(id))) r.skipped.put(ClaimService.Skip.NO_RIGHT, 1);
+            else trusted(s, r, id, team, p.map(com.mojang.authlib.GameProfile::getId).orElse(null), on);
+            touch(team);
+            ClaimsNet.send(player, new ClaimsNet.EditResult(ClaimsNet.OP_LAND + e.kind(), r.done, skipped(r)));
+        }, player.server);
+        return true;
     }
 
     /** Земля команды игрока для окна: переключатели, закреплённые сервером, доверенные, участки с чанками. */
