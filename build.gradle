@@ -102,14 +102,15 @@ tasks.named('check') {
 
 // Сервер GameTest выходит с кодом ошибки, если тест не прошёл; итог ещё и в логе. Вердикт берётся из лога.
 // Сторож: остановка сервера GameTest иногда бесконечно крутится в выгрузке чанков (рабочие потоки стоят, игра, а не мод);
-// если через 30 секунд после строки итога процесс жив, сторож его снимает. Снимается только процесс этого запуска
-// (в командной строке папка run-server этого проекта), чужие java не трогаются.
+// если через 30 секунд после строки итога процесс жив, сторож его снимает. Снимается только процесс этого запуска: потомок
+// этого процесса Gradle (демон в одно время ведёт одну сборку), java, запущенный после начала задачи. Раньше сервер искался
+// по папке run-server в командной строке и не находился: ModDevGradle запускает java с файлом аргументов (@…), а на Windows
+// командная строка чужого процесса ещё и часто не видна.
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
     ignoreExitValue = true
     doFirst {
         def log = file('run-server/logs/latest.log')
         def started = System.currentTimeMillis()
-        def marker = file('run-server').absolutePath
         Thread.startDaemon('rysclaims-gametest-watchdog') {
             Long seen = null
             while (true) {
@@ -119,7 +120,10 @@ tasks.matching { it.name == 'runGameTestServer' }.configureEach {
                 if (seen == null && log.getText('UTF-8').contains('required test')) seen = System.currentTimeMillis()
                 if (seen != null && System.currentTimeMillis() - seen > 30000) {
                     ProcessHandle.current().descendants().filter { ph ->
-                        ph.info().commandLine().map { it.contains(marker) || it.contains('rysclaims.samples') }.orElse(false)
+                        def info = ph.info()
+                        def java = info.command().map { it.replace('\\', '/').toLowerCase().matches('.*/javaw?(\\.exe)?') }.orElse(false)
+                        def fresh = info.startInstant().map { it.toEpochMilli() >= started - 1000 }.orElse(false)
+                        java && fresh
                     }.forEach { ph ->
                         logger.warn("GameTest: server did not stop 30 s after the verdict, killing pid ${ph.pid()}")
                         ph.destroyForcibly()
