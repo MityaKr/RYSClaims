@@ -32,6 +32,7 @@ public final class SableLand {
     private static boolean ready() {
         if (!tried) {
             tried = true;
+            if (!works.repka.rysclaims.compat.Links.on(works.repka.rysclaims.compat.Links.Link.SABLE)) return false;
             try {
                 Class<?> type = Class.forName("dev.ryanhcode.sable.companion.SableCompanion");
                 Object inst = type.getField("INSTANCE").get(null);
@@ -45,6 +46,11 @@ public final class SableLand {
             }
         }
         return companion != null;
+    }
+
+    /** Компаньон Sable найден (и связка включена). */
+    public static boolean available() {
+        return ready();
     }
 
     /** Подуровень, в участке которого лежит {@code pos}, или null (не участок, нет Sable, участок пуст). */

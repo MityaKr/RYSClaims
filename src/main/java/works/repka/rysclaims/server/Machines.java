@@ -144,6 +144,7 @@ public final class Machines {
      * {@code Projectile.mayInteract}): место это блок-источник вспышки {@code getBurstSourceBlockPos()}. Не вспышка: true.
      */
     public static boolean burst(Entity projectile, Level level, BlockPos target) {
+        if (!works.repka.rysclaims.compat.Links.on(works.repka.rysclaims.compat.Links.Link.BOTANIA)) return true;
         Method m = BURST.get(projectile.getClass());
         if (m == null) return true;
         BlockPos source;

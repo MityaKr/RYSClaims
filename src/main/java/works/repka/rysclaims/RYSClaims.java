@@ -39,6 +39,7 @@ public final class RYSClaims {
 
     public RYSClaims(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.SERVER, ServerConfig.SPEC);
+        container.registerConfig(ModConfig.Type.COMMON, works.repka.rysclaims.compat.LinksConfig.SPEC, works.repka.rysclaims.compat.Links.FILE);
         modBus.addListener((ModConfigEvent.Loading e) -> ServerConfig.invalidate());
         modBus.addListener((ModConfigEvent.Reloading e) -> ServerConfig.invalidate());
         modBus.addListener(Loader::register);
@@ -59,6 +60,8 @@ public final class RYSClaims {
 
         // земля поднимается раньше переезда ядра (ServerStartedEvent) и раньше остальных модов
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGH, (ServerStartingEvent e) -> ClaimsServer.start(e.getServer()));
+        // одна строка о связках с чужими модами: что встало на самом деле (Mixin применил и обработчики нашли место)
+        NeoForge.EVENT_BUS.addListener((ServerStartingEvent e) -> works.repka.rysclaims.compat.LinkReport.log());
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> {
             ClaimsServer.stop();
             Protection.clear();
