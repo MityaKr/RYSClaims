@@ -78,6 +78,8 @@ public final class LandCache {
     /** Своя правка прав ушла на сервер: до {@code Hello} с версией новее {@link #editEpoch} права своей земли под сомнением. */
     private static int editEpoch = -1;
     private static long editAt;
+    private static ClaimsNet.@Nullable LandState state;
+    private static long stateRevision;
 
     private LandCache() {}
 
@@ -128,6 +130,35 @@ public final class LandCache {
             if (old != null) TEAMS.put(old.id(), new TeamInfo(old.id(), old.name(), old.color(), a.bits()[i], Math.max(old.epoch(), a.epoch())));
         }
         counter++;
+    }
+
+    public static void state(ClaimsNet.LandState s) {
+        state = s;
+        stateRevision++;
+        counter++;
+    }
+
+    /** Земля своей команды для окна: участки, доверенные, переключатели; null, пока сервер не прислал. */
+    public static ClaimsNet.@Nullable LandState state() {
+        return state;
+    }
+
+    /** Растёт с каждым новым {@code LandState}. */
+    public static long stateRevision() {
+        return stateRevision;
+    }
+
+    /** Имя участка для показа: пустое это «Участок N». */
+    public static String plotName(int id, String name) {
+        return name.isEmpty() ? Words.t("plot.unnamed", id) : name;
+    }
+
+    /** Участок своей команды по номеру или null. */
+    public static ClaimsNet.@Nullable PlotInfo plot(int id) {
+        ClaimsNet.LandState s = state;
+        if (s == null) return null;
+        for (ClaimsNet.PlotInfo p : s.plots()) if (p.id() == id) return p;
+        return null;
     }
 
     public static void result(ClaimsNet.EditResult r) {
@@ -335,6 +366,8 @@ public final class LandCache {
         hello = null;
         result = null;
         editEpoch = -1;
+        state = null;
+        stateRevision++;
         counter++;
         lastSubscribe = 0;
     }

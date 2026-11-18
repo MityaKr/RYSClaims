@@ -65,6 +65,8 @@ public final class ClaimSync {
     private static final Map<UUID, Viewer> VIEWERS = new HashMap<>();
     private static final Map<String, LongOpenHashSet> CHANGED = new HashMap<>();
     private static final Set<UUID> TOUCHED = new HashSet<>();
+    /** Команды, у чьих участников окно должно получить новое {@code LandState}. */
+    private static final Set<UUID> STATE = new HashSet<>();
     private static boolean all;
     private static int ticks;
     /**
@@ -97,8 +99,15 @@ public final class ClaimSync {
         VIEWERS.clear();
         CHANGED.clear();
         TOUCHED.clear();
+        STATE.clear();
         all = false;
         accessDirty = false;
+    }
+
+    /** Участки, переключатели, доверенные или прогрузка команды сменились: её участникам {@code LandState} на ближайшем тике. */
+    public static void landChanged(UUID team) {
+        if (!VIEWERS.isEmpty()) STATE.add(team);
+        TOUCHED.add(team);
     }
 
     /** Права на чьей-то земле могли смениться: версия прав растёт, рассылка на ближайшем тике. */
@@ -126,6 +135,7 @@ public final class ClaimSync {
         if (!ClaimsNet.accepts(player) || !ClaimsServer.running()) return;
         VIEWERS.put(player.getUUID(), new Viewer());
         sendHello(ClaimsServer.service(), player, VIEWERS.get(player.getUUID()), true);
+        ClaimsNet.send(player, state(ClaimsServer.service(), player.server, player.getUUID()));
     }
 
     public static void logout(UUID player) {
@@ -139,6 +149,7 @@ public final class ClaimSync {
         if (VIEWERS.isEmpty()) {
             CHANGED.clear();
             TOUCHED.clear();
+            STATE.clear();
             all = false;
             accessDirty = false;
             return;
@@ -163,6 +174,16 @@ public final class ClaimSync {
             }
         } else if (!CHANGED.isEmpty()) {
             flush(server, s);
+        }
+        if (!STATE.isEmpty()) {
+            Map<UUID, ClaimsNet.LandState> built = new HashMap<>();
+            for (Map.Entry<UUID, Viewer> e : VIEWERS.entrySet()) {
+                UUID team = s.teams().teamOf(e.getKey());
+                if (!STATE.contains(team)) continue;
+                ServerPlayer p = server.getPlayerList().getPlayer(e.getKey());
+                if (p != null) ClaimsNet.send(p, built.computeIfAbsent(team, t -> state(s, server, e.getKey())));
+            }
+            STATE.clear();
         }
         boolean second = ticks % 20 == 0;
         boolean access = accessDirty;
@@ -358,6 +379,131 @@ public final class ClaimSync {
         touch(team);
         r.done = 1;
         ClaimsNet.send(player, new ClaimsNet.EditResult(ClaimsNet.OP_RIGHTS, 1, skipped(r)));
+    }
+
+    /** Правка земли своей команды из окна: доверенные, переключатели, видимость, участки. Каждая проверяет право заново. */
+    public static void land(ServerPlayer player, ClaimsNet.LandEdit e) {
+        Viewer v = VIEWERS.get(player.getUUID());
+        if (v == null || !ClaimsServer.running()) return;
+        long sec = System.currentTimeMillis() / 1000;
+        if (v.editSecond != sec) {
+            v.editSecond = sec;
+            v.edits = 0;
+        }
+        if (++v.edits > EDITS_PER_SECOND) return;
+        ClaimService s = ClaimsServer.service();
+        UUID id = player.getUUID();
+        UUID team = s.teams().teamOf(id);
+        boolean admin = s.bypass(id);
+        ClaimService.Result r = new ClaimService.Result();
+        switch (e.kind()) {
+            case ClaimsNet.LAND_TRUST, ClaimsNet.LAND_UNTRUST, ClaimsNet.LAND_FLAG, ClaimsNet.LAND_VISIBILITY -> {
+                if (!s.editsRights(id, team, admin)) {
+                    r.skipped.put(s.settings().teamsEditRights ? ClaimService.Skip.NO_RIGHT : ClaimService.Skip.LOCKED, 1);
+                    break;
+                }
+                switch (e.kind()) {
+                    case ClaimsNet.LAND_TRUST, ClaimsNet.LAND_UNTRUST -> {
+                        UUID who = profile(player.server, e.text());
+                        if (who == null || who.equals(id)) r.skipped.put(ClaimService.Skip.NOT_FOUND, 1);
+                        else if (s.trust(team, who, e.kind() == ClaimsNet.LAND_TRUST)) r.done = 1;
+                        else r.skipped.put(ClaimService.Skip.ALREADY, 1);
+                    }
+                    case ClaimsNet.LAND_FLAG -> {
+                        TeamLand.Flag[] flags = TeamLand.Flag.values();
+                        if (e.id() < 0 || e.id() >= flags.length) return;
+                        if (s.setFlag(team, flags[e.id()], e.on())) r.done = 1;
+                        else r.skipped.put(ClaimService.Skip.LOCKED, 1);
+                    }
+                    default -> {
+                        TeamLand.Visibility[] vis = TeamLand.Visibility.values();
+                        if (e.id() < 0 || e.id() >= vis.length) return;
+                        s.setVisibility(team, vis[e.id()]);
+                        r.done = 1;
+                    }
+                }
+            }
+            case ClaimsNet.LAND_RENAME -> {
+                if (s.plot(team, e.id()) == null) r.skipped.put(ClaimService.Skip.NOT_FOUND, 1);
+                else if (s.renamePlot(id, team, e.id(), e.text(), admin)) r.done = 1;
+                else r.skipped.put(ClaimService.Skip.NO_RIGHT, 1);
+            }
+            case ClaimsNet.LAND_UNLOAD_PLOT, ClaimsNet.LAND_RELEASE_PLOT -> {
+                var plot = s.plot(team, e.id());
+                if (plot == null) {
+                    r.skipped.put(ClaimService.Skip.NOT_FOUND, 1);
+                    break;
+                }
+                LongList chunks = s.plotChunks(team, e.id());
+                r = e.kind() == ClaimsNet.LAND_UNLOAD_PLOT ? s.load(id, team, plot.dim, chunks, false, admin) : s.release(id, team, plot.dim, chunks, admin);
+            }
+            default -> {
+                return;
+            }
+        }
+        touch(team);
+        ClaimsNet.send(player, new ClaimsNet.EditResult(ClaimsNet.OP_LAND + e.kind(), r.done, skipped(r)));
+    }
+
+    /** Игрок по нику (в сети или в кэше профилей) или по UUID строкой. */
+    private static @Nullable UUID profile(MinecraftServer server, String text) {
+        String t = text.trim();
+        if (t.isEmpty()) return null;
+        try {
+            return UUID.fromString(t);
+        } catch (IllegalArgumentException ignored) {
+            // ник
+        }
+        ServerPlayer online = server.getPlayerList().getPlayerByName(t);
+        if (online != null) return online.getUUID();
+        var cache = server.getProfileCache();
+        return cache == null ? null : cache.get(t).map(com.mojang.authlib.GameProfile::getId).orElse(null);
+    }
+
+    /** Земля команды игрока для окна: переключатели, закреплённые сервером, доверенные, участки с чанками. */
+    static ClaimsNet.LandState state(ClaimService s, MinecraftServer server, UUID player) {
+        UUID team = s.teams().teamOf(player);
+        TeamLand land = s.data().land(team);
+        int flags = 0, mask = 0, values = 0;
+        for (TeamLand.Flag f : TeamLand.Flag.values()) {
+            if (s.flag(team, f)) flags |= 1 << f.ordinal();
+            Boolean locked = s.settings().lockedFlags.get(f);
+            if (locked != null) {
+                mask |= 1 << f.ordinal();
+                if (locked) values |= 1 << f.ordinal();
+            }
+        }
+        List<ClaimsNet.Trusted> trusted = new ArrayList<>();
+        if (land != null) for (UUID u : land.trusted) trusted.add(new ClaimsNet.Trusted(u, Commands.playerName(server, u)));
+        List<ClaimsNet.PlotInfo> plots = new ArrayList<>();
+        if (land != null && !land.plots.isEmpty()) {
+            Map<Integer, LongArrayList> chunks = new HashMap<>();
+            Map<Integer, int[]> forced = new HashMap<>();
+            Map<Integer, works.repka.rysclaims.data.Claim> first = new HashMap<>();
+            Set<String> dims = new HashSet<>();
+            for (works.repka.rysclaims.data.Plot p : land.plots.values()) dims.add(p.dim);
+            for (String dim : dims) {
+                for (var e : s.data().claims(dim).long2ObjectEntrySet()) {
+                    var c = e.getValue();
+                    if (!c.team().equals(team)) continue;
+                    int pid = c.plot();
+                    chunks.computeIfAbsent(pid, k -> new LongArrayList()).add(e.getLongKey());
+                    if (c.force()) forced.computeIfAbsent(pid, k -> new int[1])[0]++;
+                    var f = first.get(pid);
+                    if (f == null || c.at() < f.at()) first.put(pid, c);
+                }
+            }
+            for (works.repka.rysclaims.data.Plot p : land.plots.values()) {
+                var f = first.get(p.id);
+                String by = f == null || f.by() == null ? "" : Commands.playerName(server, f.by());
+                int[] fc = forced.get(p.id);
+                LongArrayList ch = chunks.get(p.id);
+                plots.add(new ClaimsNet.PlotInfo(p.id, p.name, p.dim, fc == null ? 0 : fc[0], f == null ? 0 : f.at(), by,
+                    ch == null ? new long[0] : ch.toLongArray()));
+            }
+        }
+        TeamLand.Visibility vis = land == null ? TeamLand.Visibility.ALL : land.visibility;
+        return new ClaimsNet.LandState(team, flags, mask, values, vis.ordinal(), s.settings().pvpMode.ordinal(), trusted, plots);
     }
 
     // ---- что уходит ----

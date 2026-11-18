@@ -261,6 +261,75 @@ public final class ClaimsNet {
         }
     }
 
+    /** Доверенный игрок: UUID и ник. */
+    public record Trusted(UUID id, String name) {}
+
+    /**
+     * Участок своей команды: номер, имя (пусто: «Участок N»), измерение, сколько прогружено, когда занят первый чанк и кем,
+     * все чанки (по ним окно считает «Соединит участки» и «Разделит участок» до подтверждения).
+     */
+    public record PlotInfo(int id, String name, String dim, int forced, long at, String by, long[] chunks) {}
+
+    /**
+     * Земля своей команды для окна (план 9.2, {@code LandState}): переключатели (бит на {@code TeamLand.Flag}), закреплённые
+     * сервером (маска и значения), видимость, режим боя сервера, доверенные, участки. Шлётся при входе и после перемены.
+     */
+    public record LandState(UUID team, int flags, int lockMask, int lockValues, int visibility, int pvpMode, List<Trusted> trusted,
+                            List<PlotInfo> plots) implements CustomPacketPayload {
+        public static final Type<LandState> TYPE = new Type<>(id("land_state"));
+        public static final StreamCodec<FriendlyByteBuf, LandState> CODEC = CustomPacketPayload.codec(LandState::write, LandState::read);
+        /** Сколько чанков участков уходит самое большее (дальше участки приходят без чанков). */
+        public static final int MAX_CHUNKS = 65536;
+
+        private static LandState read(FriendlyByteBuf b) {
+            UUID team = b.readUUID();
+            int flags = b.readVarInt(), mask = b.readVarInt(), values = b.readVarInt(), vis = b.readVarInt(), pvp = b.readVarInt();
+            int n = b.readVarInt();
+            if (n < 0 || n > 1024) throw new DecoderException("слишком много доверенных: " + n);
+            List<Trusted> trusted = new ArrayList<>(n);
+            for (int i = 0; i < n; i++) trusted.add(new Trusted(b.readUUID(), b.readUtf(32)));
+            int m = b.readVarInt();
+            if (m < 0 || m > 65536) throw new DecoderException("слишком много участков: " + m);
+            List<PlotInfo> plots = new ArrayList<>(m);
+            for (int i = 0; i < m; i++) {
+                plots.add(new PlotInfo(b.readVarInt(), b.readUtf(64), dim(b), b.readVarInt(), b.readVarLong(), b.readUtf(32), longs(b, MAX_CHUNKS)));
+            }
+            return new LandState(team, flags, mask, values, vis, pvp, trusted, plots);
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeUUID(team);
+            b.writeVarInt(flags);
+            b.writeVarInt(lockMask);
+            b.writeVarInt(lockValues);
+            b.writeVarInt(visibility);
+            b.writeVarInt(pvpMode);
+            b.writeVarInt(trusted.size());
+            for (Trusted t : trusted) {
+                b.writeUUID(t.id());
+                b.writeUtf(t.name().length() > 32 ? t.name().substring(0, 32) : t.name(), 32);
+            }
+            b.writeVarInt(plots.size());
+            int budget = MAX_CHUNKS;
+            for (PlotInfo p : plots) {
+                b.writeVarInt(p.id());
+                b.writeUtf(p.name(), 64);
+                b.writeUtf(p.dim(), 128);
+                b.writeVarInt(p.forced());
+                b.writeVarLong(p.at());
+                b.writeUtf(p.by().length() > 32 ? p.by().substring(0, 32) : p.by(), 32);
+                long[] c = p.chunks().length <= budget ? p.chunks() : new long[0];
+                budget -= c.length;
+                longs(b, c);
+            }
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     // ---- серверу ----
 
     /** Подписка: измерение и регионы (упакованы как чанк). Больше {@link #MAX_REGIONS} сервер не держит. */
@@ -346,6 +415,36 @@ public final class ClaimsNet {
         }
     }
 
+    public static final int LAND_TRUST = 0, LAND_UNTRUST = 1, LAND_FLAG = 2, LAND_VISIBILITY = 3, LAND_RENAME = 4, LAND_UNLOAD_PLOT = 5,
+        LAND_RELEASE_PLOT = 6;
+    /** Итог {@link LandEdit} приходит {@link EditResult} с действием {@code OP_LAND + kind}. */
+    public static final int OP_LAND = 10;
+
+    /**
+     * Правка земли своей команды из окна: доверенный по нику ({@code text}) или UUID ({@code text}), переключатель
+     * ({@code id} номер {@code TeamLand.Flag}, {@code on}), видимость ({@code id}), участок ({@code id} номер, {@code text} имя).
+     */
+    public record LandEdit(int kind, int id, boolean on, String text) implements CustomPacketPayload {
+        public static final Type<LandEdit> TYPE = new Type<>(ClaimsNet.id("land_edit"));
+        public static final StreamCodec<FriendlyByteBuf, LandEdit> CODEC = CustomPacketPayload.codec(LandEdit::write, LandEdit::read);
+
+        private static LandEdit read(FriendlyByteBuf b) {
+            return new LandEdit(b.readVarInt(), b.readVarInt(), b.readBoolean(), b.readUtf(64));
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeVarInt(kind);
+            b.writeVarInt(id);
+            b.writeBoolean(on);
+            b.writeUtf(text.length() > 64 ? text.substring(0, 64) : text, 64);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     // ---- регистрация ----
 
     public static void register(RegisterPayloadHandlersEvent event) {
@@ -357,10 +456,12 @@ public final class ClaimsNet {
         r.playToClient(Diff.TYPE, Diff.CODEC, (p, c) -> client(() -> Client.diff(p)));
         r.playToClient(Access.TYPE, Access.CODEC, (p, c) -> client(() -> Client.access(p)));
         r.playToClient(EditResult.TYPE, EditResult.CODEC, (p, c) -> client(() -> Client.result(p)));
+        r.playToClient(LandState.TYPE, LandState.CODEC, (p, c) -> client(() -> Client.state(p)));
         r.playToServer(Subscribe.TYPE, Subscribe.CODEC, (p, c) -> server(c, pl -> ClaimSync.subscribe(pl, p)));
         r.playToServer(Edit.TYPE, Edit.CODEC, (p, c) -> server(c, pl -> ClaimSync.edit(pl, p)));
         r.playToServer(Keep.TYPE, Keep.CODEC, (p, c) -> server(c, ClaimSync::keep));
         r.playToServer(RightsEdit.TYPE, RightsEdit.CODEC, (p, c) -> server(c, pl -> ClaimSync.rights(pl, p)));
+        r.playToServer(LandEdit.TYPE, LandEdit.CODEC, (p, c) -> server(c, pl -> ClaimSync.land(pl, p)));
     }
 
     private static void client(Runnable r) {
@@ -395,6 +496,10 @@ public final class ClaimsNet {
 
         static void result(EditResult r) {
             works.repka.rysclaims.client.LandCache.result(r);
+        }
+
+        static void state(LandState s) {
+            works.repka.rysclaims.client.LandCache.state(s);
         }
     }
 

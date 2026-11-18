@@ -81,8 +81,9 @@ public final class TeamLand {
      */
     public final Set<UUID> legacyMembers = new LinkedHashSet<>();
     public @Nullable UUID legacyOwner;
-    /** Участки (0.2): хранятся как есть. */
-    public ListTag plots = new ListTag();
+    /** Участки по номерам (план, раздел 6). Номера не переиспользуются: {@link #nextPlot}. */
+    public final java.util.Map<Integer, Plot> plots = new java.util.LinkedHashMap<>();
+    public int nextPlot = 1;
 
     int claimed, forced;
 
@@ -147,7 +148,16 @@ public final class TeamLand {
             if (legacyOwner != null) l.putUUID("owner", legacyOwner);
             t.put("legacy", l);
         }
-        t.put("plots", plots.copy());
+        ListTag pl = new ListTag();
+        for (Plot p : plots.values()) {
+            CompoundTag one = new CompoundTag();
+            one.putInt("id", p.id);
+            one.putString("name", p.name);
+            one.putString("dim", p.dim);
+            pl.add(one);
+        }
+        t.put("plots", pl);
+        t.putInt("nextPlot", nextPlot);
         return t;
     }
 
@@ -183,7 +193,14 @@ public final class TeamLand {
             }
             if (l.hasUUID("owner")) land.legacyOwner = l.getUUID("owner");
         }
-        land.plots = t.getList("plots", Tag.TAG_COMPOUND).copy();
+        for (Tag x : t.getList("plots", Tag.TAG_COMPOUND)) {
+            CompoundTag one = (CompoundTag) x;
+            int pid = one.getInt("id");
+            if (pid <= 0 || !one.contains("dim")) continue;
+            land.plots.put(pid, new Plot(pid, one.getString("name"), one.getString("dim")));
+            land.nextPlot = Math.max(land.nextPlot, pid + 1);
+        }
+        land.nextPlot = Math.max(land.nextPlot, t.getInt("nextPlot"));
         return land;
     }
 }

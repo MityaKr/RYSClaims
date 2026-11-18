@@ -11,6 +11,7 @@ public final class TeamHooks implements TeamsApi.Listener {
     @Override
     public void onJoined(UUID team, UUID player, boolean carryProgress) {
         ClaimSync.touch(team);
+        ClaimSync.landChanged(team);
         ClaimSync.accessChanged();
         if (!ClaimsServer.running()) return;
         ClaimsServer.service().joined(team, player);
@@ -20,6 +21,8 @@ public final class TeamHooks implements TeamsApi.Listener {
     @Override
     public void onLeft(UUID team, UUID player, boolean keepCopy) {
         ClaimSync.touch(team);
+        ClaimSync.landChanged(team);
+        ClaimSync.landChanged(player);
         ClaimSync.accessChanged();
         ClaimsServer.loaderDirty();
     }

@@ -116,6 +116,8 @@ public final class Settings {
     public Set<String> noWildernessDimensions = new LinkedHashSet<>();
     /** Могут ли команды менять свои права и переключатели. */
     public boolean teamsEditRights = true;
+    /** Переключатели, закреплённые сервером: команда их видит, но не меняет (план, раздел 6). */
+    public java.util.EnumMap<TeamLand.Flag, Boolean> lockedFlags = new java.util.EnumMap<>(TeamLand.Flag.class);
     // ---- через границу земли ----
     /** Вода и лава текут с чужой или свободной земли на землю команды. */
     public boolean fluidsCross = false;
@@ -135,6 +137,16 @@ public final class Settings {
         r.set(Rights.Action.OPEN, Rights.Preset.TEAM_AND_ALLIES);
         r.set(Rights.Action.USE, Rights.Preset.TEAM_AND_ALLIES);
         return r;
+    }
+
+    /** Строка {@code pvp=on} настройки закреплённых переключателей или null. */
+    public static java.util.Map.@org.jetbrains.annotations.Nullable Entry<TeamLand.Flag, Boolean> parseLock(String line) {
+        int eq = line.indexOf('=');
+        if (eq <= 0) return null;
+        TeamLand.Flag f = TeamLand.Flag.parse(line.substring(0, eq).trim());
+        String v = line.substring(eq + 1).trim().toLowerCase(Locale.ROOT);
+        if (f == null || !(v.equals("on") || v.equals("off") || v.equals("true") || v.equals("false"))) return null;
+        return java.util.Map.entry(f, v.equals("on") || v.equals("true"));
     }
 
     /** Разрешён ли приват в измерении. */

@@ -17,7 +17,7 @@ public final class ServerConfig {
     private static final ModConfigSpec.IntValue CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, LOG_DAYS;
     private static final ModConfigSpec.ConfigValue<String> BONUS_MODE, MAX_LOAD, ALLY_MODE, PVP_MODE, OWNERLESS;
     private static final ModConfigSpec.BooleanValue FLUIDS, FIRE, PISTONS;
-    private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED, ONLY, NO_WILD_DIMS;
+    private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED, ONLY, NO_WILD_DIMS, LOCKED;
     private static final ModConfigSpec.BooleanValue ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS;
     private static final ModConfigSpec.ConfigValue<String> DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY;
 
@@ -58,6 +58,8 @@ public final class ServerConfig {
             .defineListAllowEmpty("noWildernessDimensions", List.of(), () -> "mod:dimension", o -> o instanceof String);
         EDIT_RIGHTS = b.comment("Teams may change their own rights and switches").define("teamsEditRights", true);
         LOG_DAYS = b.comment("Days the log of denied attempts keeps its lines").defineInRange("logDays", 7, 1, 365);
+        LOCKED = b.comment("Team switches fixed by the server, \"switch=on\" or \"switch=off\": ownExplosions, mobGrief, pvp, machinesInside, machinesOutside, machinesProfile")
+            .defineListAllowEmpty("lockedSwitches", List.of(), () -> "pvp=on", o -> o instanceof String str && Settings.parseLock(str) != null);
         b.pop();
 
         b.push("borders");
@@ -114,6 +116,10 @@ public final class ServerConfig {
             s.noWildernessDimensions = new LinkedHashSet<>(NO_WILD_DIMS.get());
             s.teamsEditRights = EDIT_RIGHTS.get();
             s.logDays = LOG_DAYS.get();
+            for (String l : LOCKED.get()) {
+                var e = Settings.parseLock(l);
+                if (e != null) s.lockedFlags.put(e.getKey(), e.getValue());
+            }
             s.fluidsCross = FLUIDS.get();
             s.fireCross = FIRE.get();
             s.pistonsCross = PISTONS.get();
@@ -132,7 +138,7 @@ public final class ServerConfig {
     private static List<ModConfigSpec.ConfigValue<?>> all() {
         return List.of(CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, BONUS_MODE, MAX_LOAD, ALLY_MODE,
             PVP_MODE, DISABLED, ONLY, NO_WILD_DIMS, ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS, DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY,
-            LOG_DAYS, FLUIDS, FIRE, PISTONS, OWNERLESS);
+            LOG_DAYS, FLUIDS, FIRE, PISTONS, OWNERLESS, LOCKED);
     }
 
     /**

@@ -77,6 +77,7 @@ public final class ClaimsStep implements Migrations.Step {
         ClaimData live = service.data();
         if (!live.isEmpty()) throw new IllegalStateException("земля RYSClaims уже есть, перенос затёр бы её");
         live.replaceWith(plan.data);
+        service.rebuildPlots();
         if (untouched) {
             ServerConfig.write(plan.settings);
             plan.report.line("настройки FTB Chunks перенесены в rysclaims-server.toml" + (w.configFile == null ? " (файла FTB нет: наши по умолчанию)" : ""));

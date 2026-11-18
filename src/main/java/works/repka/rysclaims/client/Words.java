@@ -35,6 +35,13 @@ public final class Words {
             case ClaimsNet.OP_LOAD -> t("result.load", r.done());
             case ClaimsNet.OP_UNLOAD -> t("result.unload", r.done());
             case ClaimsNet.OP_KEEP -> t("result.keep", r.done());
+            case ClaimsNet.OP_LAND + ClaimsNet.LAND_TRUST -> t(r.done() > 0 ? "result.trust" : "result.failed");
+            case ClaimsNet.OP_LAND + ClaimsNet.LAND_UNTRUST -> t(r.done() > 0 ? "result.untrust" : "result.failed");
+            case ClaimsNet.OP_LAND + ClaimsNet.LAND_FLAG -> t(r.done() > 0 ? "result.flag" : "result.failed");
+            case ClaimsNet.OP_LAND + ClaimsNet.LAND_VISIBILITY -> t(r.done() > 0 ? "result.visibility" : "result.failed");
+            case ClaimsNet.OP_LAND + ClaimsNet.LAND_RENAME -> t(r.done() > 0 ? "result.rename" : "result.failed");
+            case ClaimsNet.OP_LAND + ClaimsNet.LAND_UNLOAD_PLOT -> t("result.unload", r.done());
+            case ClaimsNet.OP_LAND + ClaimsNet.LAND_RELEASE_PLOT -> t("result.release", r.done());
             default -> t("result.rights");
         });
         int total = 0;

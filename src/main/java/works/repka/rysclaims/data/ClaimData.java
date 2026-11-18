@@ -27,7 +27,7 @@ import org.jetbrains.annotations.Nullable;
  * v, edits
  * ids: [uuid…]                       команды по номерам, на них ссылается поле team у чанка
  * teams: { uuid: { bonusClaims, bonusForce, lastSeen, loadMode, loadHours, visibility, rights, flags, trusted,
- *                  machineNames, legacy?, plots } }
+ *                  machineNames, legacy?, plots: [ { id, name, dim } ], nextPlot } }
  * claims: { измерение: [ { pos, team, by?, at, plot, force, releaseAt } ] }
  * players: { uuid: { bonusClaims, bonusForce } }
  * archive: [ … ]                     распавшиеся команды (0.2), хранится как есть
@@ -214,17 +214,40 @@ public final class ClaimData {
 
     /** Отдаёт всю землю команды {@code from} команде {@code to} вместе с добавкой команды. Возвращает чанки по измерениям. */
     public Map<String, LongList> transfer(UUID from, UUID to) {
+        return transfer(from, to, null);
+    }
+
+    /**
+     * То же; участки уходящей команды переходят под новыми номерами с теми же именами, {@code plotMap} (если не null)
+     * получает пары «новый номер → старый» для отмены.
+     */
+    public Map<String, LongList> transfer(UUID from, UUID to, @Nullable Map<Integer, Integer> plotMap) {
         Map<String, LongList> moved = new LinkedHashMap<>();
         if (from.equals(to)) return moved;
+        TeamLand src = teams.get(from);
+        Map<Integer, Integer> remap = new HashMap<>();
+        if (src != null && !src.plots.isEmpty()) {
+            TeamLand dst = landOrCreate(to);
+            for (Plot p : src.plots.values()) {
+                int id = dst.nextPlot++;
+                dst.plots.put(id, new Plot(id, p.name, p.dim));
+                remap.put(p.id, id);
+                if (plotMap != null) plotMap.put(id, p.id);
+            }
+            src.plots.clear();
+        }
         for (Map.Entry<String, Long2ObjectOpenHashMap<Claim>> e : dims.entrySet()) {
             LongList list = new LongArrayList();
             for (Long2ObjectMap.Entry<Claim> c : e.getValue().long2ObjectEntrySet()) {
                 if (c.getValue().team.equals(from)) list.add(c.getLongKey());
             }
-            for (long chunk : list) reassign(e.getKey(), chunk, to);
+            for (long chunk : list) {
+                reassign(e.getKey(), chunk, to);
+                Claim c = e.getValue().get(chunk);
+                if (c != null) c.plot = remap.getOrDefault(c.plot, 0);
+            }
             if (!list.isEmpty()) moved.put(e.getKey(), list);
         }
-        TeamLand src = teams.get(from);
         if (src != null) {
             TeamLand dst = landOrCreate(to);
             dst.bonusClaims += src.bonusClaims;
@@ -233,6 +256,22 @@ public final class ClaimData {
             src.bonusForce = 0;
         }
         return moved;
+    }
+
+    /** Возвращает участки после отмены слияния: чанки {@code team} с номером из {@code plotMap} получают старый номер. */
+    public void restorePlots(UUID team, UUID from, Map<Integer, Integer> plotMap) {
+        TeamLand dst = teams.get(from), src = landOrCreate(team);
+        if (dst == null) return;
+        for (Map.Entry<Integer, Integer> e : plotMap.entrySet()) {
+            Plot p = dst.plots.remove(e.getKey());
+            if (p != null) src.plots.put(e.getValue(), new Plot(e.getValue(), p.name, p.dim));
+            src.nextPlot = Math.max(src.nextPlot, e.getValue() + 1);
+        }
+        for (Long2ObjectOpenHashMap<Claim> map : dims.values()) {
+            for (Claim c : map.values()) {
+                if (c.team.equals(team) && plotMap.containsKey(c.plot)) c.plot = plotMap.get(c.plot);
+            }
+        }
     }
 
     /** Переписывает чанк на другую команду, сохраняя время, прогрузку и отсчёт. */

@@ -19,16 +19,19 @@ import works.repka.ryscore.map.MapApi;
 import works.repka.ryscore.theme.Theme;
 import works.repka.ryscore.theme.ThemeManager;
 import works.repka.ryscore.ui.Draw;
+import works.repka.ryscore.ui.Field;
 import works.repka.ryscore.ui.Icons;
 import works.repka.ryscore.ui.Kit;
 import works.repka.ryscore.ui.ScaledScreen;
 import works.repka.ryscore.ui.Type.Weight;
 import works.repka.rysclaims.data.Chunks;
 import works.repka.rysclaims.data.Rights;
+import works.repka.rysclaims.data.TeamLand;
 import works.repka.rysclaims.net.ClaimsNet;
 
 /**
- * Окно земли (план 13.1, макеты {@code 35}, {@code 30}–{@code 33}, {@code 36}, {@code 41}, {@code 41b}), два подраздела.
+ * Окно земли (план 13.1, макеты {@code 35}, {@code 30}–{@code 33}, {@code 36}, {@code 40}–{@code 41b}): подразделы «Сетка»,
+ * «Участки», «Права».
  *
  * <p>«Сетка»: полотно чанков вокруг игрока, фон это тайлы карты ({@code MapApi.drawTiles}), если RYSMap есть, иначе тёмное
  * полотно. Своя земля цветом команды, чужая серой штриховкой с именем, освобождаемая красной штриховкой, прогрузка
@@ -36,9 +39,17 @@ import works.repka.rysclaims.net.ClaimsNet;
  * Справа панель: команда и роль, два лимита с полосами, три инструмента (занять, прогрузка, освободить), итог выделения,
  * легенда, главная кнопка с Enter. Освобождение идёт с отсчётом, внизу полотна строка «освободятся через … · Оставить».
  *
+ * <p>Измерение выбирается списком справа над сеткой. Панель до подтверждения говорит, соединит ли правка участки или
+ * разрежет участок (тот же расчёт, что у сервера, на своей копии участков из {@code LandState}).
+ *
+ * <p>«Участки» (макеты {@code 40}, {@code 40b}, {@code 40c}): две карточки сводки, таблица участков (имя с карандашом, когда и
+ * кем занят, измерение, чанки, прогрузка, середина), «На карте» и меню: переименовать, показать на карте, выключить
+ * прогрузку, освободить целиком (единственное действие с окном-вопросом).
+ *
  * <p>«Права»: четыре действия на три столбца (команда, союзники, все; у одиночки «ты, доверенные, все»), три готовых
  * набора и «Свои», строка «Вернуть» 30 секунд после правки. Править может тот, кому это разрешено в RYSTeams (по
- * умолчанию лидер) и если сервер не закрыл правку.
+ * умолчанию лидер) и если сервер не закрыл правку. Под таблицей доверенные игроки (права столбца «Союзники») и шесть
+ * переключателей команды; закреплённое сервером показано замком.
  *
  * <p>Сервер ничему из окна не верит: окно только показывает и просит, правки проверяются заново.
  */
@@ -49,7 +60,7 @@ public final class LandScreen extends ScaledScreen {
     private static final long RESULT_MS = 6000, UNDO_MS = 30_000;
     private static final int SHIELD_TILE = 0xFFD9714F;
 
-    enum Page { GRID, RIGHTS }
+    enum Page { GRID, PLOTS, RIGHTS }
 
     enum Tool { CLAIM, FORCE, RELEASE }
 
@@ -62,8 +73,14 @@ public final class LandScreen extends ScaledScreen {
     private final Kit.Hits hits = new Kit.Hits();
     private final Kit.Dropdown presetDrop = new Kit.Dropdown();
     private Page page = lastPage;
-    private final ResourceKey<Level> dimension;
-    private final String dim;
+    private ResourceKey<Level> dimension;
+    private String dim;
+    private final Kit.Dropdown dimDrop = new Kit.Dropdown(), visDrop = new Kit.Dropdown();
+    /** Участок, чьё меню открыто, и участок, который переименовывается; -1: нет. */
+    private int menuPlot = -1, renaming = -1;
+    private boolean trusting;
+    private final Field rename = new Field(100, 10), trustField = new Field(80, 10);
+    private Kit.@Nullable Dialog dialog;
     private double centerX, centerZ, cell = 16;
     private int wx, wy, ww, wh, cx0, cy0, cw, ch, px0;
     private boolean selecting, removing, panning, dragged;
@@ -129,6 +146,13 @@ public final class LandScreen extends ScaledScreen {
         cy0 = wy + HEADER + BAR;
         cw = px0 - wx;
         ch = wy + wh - cy0;
+        rename.setSpans(List.of(), new int[0]);
+        trustField.setSpans(List.of(), new int[0]);
+        trustField.setHint(Component.translatable("rysclaims.rights.trusted.hint"));
+        rename.visible = renaming >= 0;
+        trustField.visible = trusting;
+        addWidget(rename);
+        addWidget(trustField);
     }
 
     static Theme slate() {
@@ -164,13 +188,21 @@ public final class LandScreen extends ScaledScreen {
             askedOver = null;
         }
         pills(g, t, mx, my);
-        if (page == Page.GRID) {
-            canvas(g, t, slate(), h, mx, my);
-            panel(g, t, h, mx, my);
-        } else {
-            rights(g, t, h, mx, my);
+        if (page != Page.PLOTS && renaming >= 0) finishRename(false);
+        if (page != Page.RIGHTS && trusting) finishTrust(false);
+        switch (page) {
+            case GRID -> {
+                canvas(g, t, slate(), h, mx, my);
+                panel(g, t, h, mx, my);
+                dimDropdown(g, t, mx, my);
+                dimList(g, t, mx, my);
+            }
+            case PLOTS -> plots(g, t, h, mx, my);
+            case RIGHTS -> rights(g, t, h, mx, my);
         }
-        if (tip != null && !presetDrop.open) Kit.tooltip(g, t, tip, mx, my);
+        boolean lists = presetDrop.open || dimDrop.open || visDrop.open || menuOpen();
+        if (tip != null && !lists && dialog == null) Kit.tooltip(g, t, tip, mx, my);
+        if (dialog != null) Kit.dialog(g, t, hits, dialog, mx, my);
     }
 
     private void header(GuiGraphics g, Theme t, int mx, int my) {
@@ -197,18 +229,29 @@ public final class LandScreen extends ScaledScreen {
     /** Подразделы рядом пилюль под шапкой (как «Карта | Список» в книге). */
     private void pills(GuiGraphics g, Theme t, int mx, int my) {
         int y = wy + HEADER + 6, x = wx + 10;
-        String a = Words.t("screen.page.grid"), b = Words.t("screen.page.rights");
-        int w = (int) Math.ceil(Draw.labelWidth(a, 12.5f, Weight.MEDIUM) + Draw.labelWidth(b, 12.5f, Weight.MEDIUM)) + 24 + 6;
+        ClaimsNet.LandState st = LandCache.state();
+        int plotsN = st == null ? 0 : st.plots().size();
+        Page[] pages = Page.values();
+        String[] labels = {Words.t("screen.page.grid"), plotsN > 0 ? Words.t("screen.page.plots.n", plotsN) : Words.t("screen.page.plots"),
+            Words.t("screen.page.rights")};
+        float sum = 0;
+        for (String l : labels) sum += Draw.labelWidth(l, 12.5f, Weight.MEDIUM);
+        int w = (int) Math.ceil(sum) + 12 * labels.length + 2 * (labels.length - 1) + 4;
         if (t.beveled()) Draw.bevel(g, x - 2, y - 2, w, 18, t.c("sidebar.bg"), t.c("panel.bevel.dark"), t.c("panel.bevel.light"), 1, true);
         else Draw.roundBox(g, x - 2, y - 2, w, 18, 5, t.c("sidebar.bg"), t.c("panel.border"));
-        x += Kit.pill(g, t, hits, x, y, a, page == Page.GRID, mx, my, () -> setPage(Page.GRID)) + 2;
-        Kit.pill(g, t, hits, x, y, b, page == Page.RIGHTS, mx, my, () -> setPage(Page.RIGHTS));
+        for (int i = 0; i < pages.length; i++) {
+            Page p = pages[i];
+            x += Kit.pill(g, t, hits, x, y, labels[i], page == p, mx, my, () -> setPage(p)) + 2;
+        }
     }
 
     private void setPage(Page p) {
         page = p;
         lastPage = p;
         presetDrop.close();
+        dimDrop.close();
+        visDrop.close();
+        for (Kit.Dropdown d : menus.values()) d.close();
     }
 
     // ---- полотно ----
@@ -659,6 +702,14 @@ public final class LandScreen extends ScaledScreen {
                 Draw.label(g, v, x + w - 6 - Draw.labelWidth(v, 12, Weight.SEMIBOLD), cy, 12, Weight.SEMIBOLD, vc);
             }
             y += cardH + 6;
+            String plotsNote = preview(s);
+            if (!plotsNote.isEmpty()) {
+                for (String line : Draw.wrapLabel(plotsNote, w, 11, Weight.REGULAR, 3)) {
+                    Draw.label(g, line, x, y + 3, 11, Weight.REGULAR, t.c("text.secondary"));
+                    y += 7;
+                }
+                y += 4;
+            }
             if (warnRow == -2) y = callout(g, t, x, y, w, Words.t("panel.release_note", h.releaseSeconds()));
         }
 
@@ -852,7 +903,7 @@ public final class LandScreen extends ScaledScreen {
         else Draw.label(g, label, dx + 5, wy + HEADER + 13, 12.5f, Weight.REGULAR, t.c("text.secondary"));
 
         // таблица
-        int nameW = 250, colW = 72, rowH = 21;
+        int nameW = 250, colW = 72, rowH = 19;
         int tableW = nameW + colW * 3;
         String[][] cols = h.solo()
             ? new String[][] {{Words.t("col.you"), playerName()}, {Words.t("col.trusted"), Words.plural(h.trusted(), "players")}, {Words.t("col.all"), Words.t("col.all.note")}}
@@ -873,11 +924,11 @@ public final class LandScreen extends ScaledScreen {
             Kit.divider(g, t, x, y, tableW);
             Draw.roundBox(g, x + 1, y + 4, 13, 13, 3, t.c("slot.bg"), t.c("card.border"));
             Icons.draw(g, icons[i], x + 3.5f, y + 6.5f, 8, t.c("text.secondary"));
-            Draw.label(g, Words.t("right." + a.key()), x + 20, y + 7, 12.5f, Weight.REGULAR, t.c("text.primary"));
-            Draw.label(g, Draw.ellipsize(Words.t("right." + a.key() + ".note"), nameW - 24, 11, Weight.REGULAR), x + 20, y + 14.5f, 11, Weight.REGULAR, t.c("text.muted"));
+            Draw.label(g, Words.t("right." + a.key()), x + 20, y + 6.5f, 12.5f, Weight.REGULAR, t.c("text.primary"));
+            Draw.label(g, Draw.ellipsize(Words.t("right." + a.key() + ".note"), nameW - 24, 11, Weight.REGULAR), x + 20, y + 13.5f, 11, Weight.REGULAR, t.c("text.muted"));
             for (int c = 0; c < 3; c++) {
                 Rights.Column col = Rights.Column.values()[c];
-                int bx = (int) (x + nameW + colW * c + colW / 2f - 4.5f), by = y + 6;
+                int bx = (int) (x + nameW + colW * c + colW / 2f - 4.5f), by = y + 5;
                 boolean on = r.shown(a, col);
                 // у одиночки первый столбец это он сам (лидер): ему можно всё
                 Runnable toggle = !edit || (h.solo() && col == Rights.Column.TEAM) ? null : () -> cell(h, a, col, !on);
@@ -886,22 +937,27 @@ public final class LandScreen extends ScaledScreen {
             y += rowH;
         }
         Kit.divider(g, t, x, y, tableW);
-        y += 8;
+        y += 6;
+        int fullW = ww - 28;
+        y = trusted(g, t, h, edit, x, y, fullW, mx, my) + 5;
+        Kit.divider(g, t, x, y, fullW);
+        y += 5;
+        switches(g, t, h, edit, x, y, fullW, mx, my);
+        y += 62;
 
         // пояснения
         List<String> notes = new ArrayList<>();
         notes.add(Words.t(h.solo() ? "rights.note.solo" : "rights.note.leader"));
         if (!edit) notes.add(Words.t(h.rightsLocked() ? "rights.locked" : "rights.no_right"));
-        notes.add(Words.t("rights.note.more"));
         for (String n : notes) {
-            for (String line : Draw.wrapLabel(n, tableW, 11.5f, Weight.REGULAR, 3)) {
+            for (String line : Draw.wrapLabel(n, fullW, 11.5f, Weight.REGULAR, 2)) {
                 Draw.label(g, line, x, y + 4, 11.5f, Weight.REGULAR, t.c("text.muted"));
                 y += 8;
             }
             y += 3;
         }
         ClaimsNet.EditResult res = LandCache.result(RESULT_MS);
-        if (res != null && res.op() == ClaimsNet.OP_RIGHTS && res.done() == 0) {
+        if (res != null && (res.op() == ClaimsNet.OP_RIGHTS || res.op() >= ClaimsNet.OP_LAND) && res.done() == 0) {
             Draw.label(g, Words.result(res), x, y + 4, 11.5f, Weight.REGULAR, deny(t));
         }
 
@@ -935,6 +991,7 @@ public final class LandScreen extends ScaledScreen {
                 if (i < Rights.Preset.values().length) presetEdit(h, Rights.Preset.values()[i]);
             });
         }
+        visList(g, t, mx, my);
     }
 
     static String presetName(Rights.Preset p, boolean solo) {
@@ -981,6 +1038,470 @@ public final class LandScreen extends ScaledScreen {
         undoBits = -1;
     }
 
+    // ---- измерение ----
+
+    /** Имя измерения: известные по словам окна, остальные по id ({@code mod:some_place} → «Some place»). */
+    static String dimName(String id) {
+        String key = "rysclaims.dim." + id.replace(':', '.');
+        String path = id.substring(id.indexOf(':') + 1).replace('_', ' ');
+        String pretty = path.isEmpty() ? id : Character.toUpperCase(path.charAt(0)) + path.substring(1);
+        return Component.translatableWithFallback(key, pretty).getString();
+    }
+
+    /** Измерения для выбора: те, что знает клиент, и те, где у команды есть участки. Верхний, Нижний, Край первыми. */
+    private List<String> dims() {
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>(List.of("minecraft:overworld", "minecraft:the_nether", "minecraft:the_end"));
+        var conn = Minecraft.getInstance().getConnection();
+        List<String> rest = new ArrayList<>();
+        if (conn != null) for (ResourceKey<Level> k : conn.levels()) rest.add(k.location().toString());
+        ClaimsNet.LandState st = LandCache.state();
+        if (st != null) for (ClaimsNet.PlotInfo p : st.plots()) rest.add(p.dim());
+        java.util.Collections.sort(rest);
+        set.addAll(rest);
+        if (conn != null) set.removeIf(d -> d.startsWith("minecraft:") && conn.levels().stream().noneMatch(k -> k.location().toString().equals(d)) && !d.equals(dim));
+        return new ArrayList<>(set);
+    }
+
+    /** Окно на другом измерении: середина на игроке, если он там, иначе на самом большом участке, иначе на нуле. */
+    void switchDim(String id) {
+        if (id.equals(dim)) return;
+        net.minecraft.resources.ResourceLocation loc = net.minecraft.resources.ResourceLocation.tryParse(id);
+        if (loc == null) return;
+        dimension = ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, loc);
+        dim = id;
+        SELECTION.clear();
+        selectionDim = dim;
+        LocalPlayer p = Minecraft.getInstance().player;
+        if (p != null && p.level().dimension().equals(dimension)) {
+            centerX = p.getX();
+            centerZ = p.getZ();
+            return;
+        }
+        ClaimsNet.PlotInfo best = null;
+        ClaimsNet.LandState st = LandCache.state();
+        if (st != null) for (ClaimsNet.PlotInfo pl : st.plots()) if (pl.dim().equals(id) && (best == null || pl.chunks().length > best.chunks().length)) best = pl;
+        if (best != null && best.chunks().length > 0) {
+            long c = works.repka.rysclaims.data.Plots.center(LongArrayList.wrap(best.chunks()));
+            centerX = Chunks.x(c) * 16 + 8;
+            centerZ = Chunks.z(c) * 16 + 8;
+        } else {
+            centerX = 0;
+            centerZ = 0;
+        }
+    }
+
+    private void dimDropdown(GuiGraphics g, Theme t, int mx, int my) {
+        String label = dimName(dim);
+        int w = Kit.dropdownWidth(label, 150);
+        Kit.dropdown(g, t, hits, dimDrop, wx + ww - 10 - w, wy + HEADER + 6, 150, label, false, mx, my);
+    }
+
+    private void dimList(GuiGraphics g, Theme t, int mx, int my) {
+        if (!dimDrop.open) return;
+        List<String> ds = dims();
+        List<Kit.Option> options = new ArrayList<>();
+        int sel = -1;
+        ClaimsNet.LandState st = LandCache.state();
+        for (int i = 0; i < ds.size(); i++) {
+            int n = 0;
+            if (st != null) for (ClaimsNet.PlotInfo p : st.plots()) if (p.dim().equals(ds.get(i))) n += p.chunks().length;
+            options.add(new Kit.Option(dimName(ds.get(i)), n > 0 ? n : -1));
+            if (ds.get(i).equals(dim)) sel = i;
+        }
+        Kit.dropdownList(g, t, hits, dimDrop, options, sel, 150, mx, my, i -> switchDim(ds.get(i)));
+    }
+
+    // ---- подсказка «Соединит участки», «Разделит участок» (макеты 30, 33) ----
+
+    private long previewKey = Long.MIN_VALUE;
+    private String previewText = "";
+
+    /** Что станет с участками от главной кнопки: тот же расчёт, что у сервера ({@code Plots.assign}), на своей копии участков. */
+    private String preview(Sel s) {
+        ClaimsNet.LandState st = LandCache.state();
+        if (st == null || s.total == 0 || tool == Tool.FORCE) return "";
+        long key = SELECTION.hashCode() * 31L + tool.ordinal() * 1_000_003L + LandCache.stateRevision() * 7919L + dim.hashCode() + LandCache.counter();
+        if (key == previewKey) return previewText;
+        previewKey = key;
+        it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap old = new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
+        Map<Integer, String> names = new java.util.LinkedHashMap<>();
+        List<String> all = new ArrayList<>();
+        int next = 1;
+        for (ClaimsNet.PlotInfo p : st.plots()) {
+            all.add(p.name());
+            next = Math.max(next, p.id() + 1);
+            if (!p.dim().equals(dim)) continue;
+            names.put(p.id(), p.name());
+            for (long c : p.chunks()) old.put(c, p.id());
+        }
+        LongOpenHashSet chunks = new LongOpenHashSet(old.keySet());
+        if (tool == Tool.CLAIM) chunks.addAll(s.freeList);
+        else chunks.removeAll(s.release);
+        var a = works.repka.rysclaims.data.Plots.assign(chunks, old::get, names, all, next);
+        Map<Integer, List<String>> merges = new java.util.LinkedHashMap<>();
+        List<String> splits = new ArrayList<>();
+        for (var e : a.events) {
+            if (e.kind() == works.repka.rysclaims.data.Plots.Event.Kind.MERGE) {
+                merges.computeIfAbsent(e.keptId(), k -> new ArrayList<>(List.of(LandCache.plotName(e.keptId(), e.kept())))).add(LandCache.plotName(e.otherId(), e.other()));
+            } else {
+                splits.add(Words.t("preview.split", LandCache.plotName(e.keptId(), e.kept()), e.other().isEmpty() ? Words.t("plot.new") : e.other()));
+            }
+        }
+        List<String> lines = new ArrayList<>();
+        for (List<String> m : merges.values()) lines.add(Words.t("preview.merge", String.join(", ", m.subList(0, m.size() - 1)), m.get(m.size() - 1)));
+        lines.addAll(splits);
+        previewText = String.join(" ", lines);
+        return previewText;
+    }
+
+    // ---- участки (макеты 40, 40b, 40c) ----
+
+    private int plotScroll;
+
+    private List<ClaimsNet.PlotInfo> sortedPlots() {
+        ClaimsNet.LandState st = LandCache.state();
+        if (st == null) return List.of();
+        List<ClaimsNet.PlotInfo> list = new ArrayList<>(st.plots());
+        list.sort((a, b) -> a.chunks().length != b.chunks().length ? Integer.compare(b.chunks().length, a.chunks().length) : Integer.compare(a.id(), b.id()));
+        return list;
+    }
+
+    static String when(long at) {
+        if (at <= 0) return "";
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        java.time.LocalDate day = java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDate(), today = java.time.LocalDate.now(zone);
+        if (day.equals(today)) return Words.t("date.today");
+        if (day.equals(today.minusDays(1))) return Words.t("date.yesterday");
+        String lang = Minecraft.getInstance().getLanguageManager().getSelected();
+        java.util.Locale loc = java.util.Locale.forLanguageTag(lang.replace('_', '-'));
+        String pattern = day.getYear() == today.getYear() ? "d MMMM" : "d MMMM yyyy";
+        return day.format(java.time.format.DateTimeFormatter.ofPattern(pattern, loc));
+    }
+
+    private void plots(GuiGraphics g, Theme t, ClaimsNet.Hello h, int mx, int my) {
+        int x = wx + 12, w = ww - 24, top = wy + HEADER + BAR + 4;
+        List<ClaimsNet.PlotInfo> list = sortedPlots();
+        // сводка: две карточки
+        int cw2 = (w - 6) / 2;
+        summary(g, t, x, top, cw2, Icons.Shape.SHIELD, Words.t("plots.card.claims"), h.claimed(), Words.t("plots.of_chunks", h.claimLimit()), h.claimLimit());
+        summary(g, t, x + cw2 + 6, top, w - cw2 - 6, Icons.Shape.ANCHOR, Words.t("plots.card.force"), h.forced(), Words.t("plots.of_chunks", h.forceLimit()), h.forceLimit());
+        int y = top + 44;
+        if (list.isEmpty()) {
+            String text = Words.t(LandCache.state() == null ? "screen.waiting" : "plots.empty");
+            float tw = Draw.labelWidth(text, 12.5f, Weight.REGULAR);
+            Draw.label(g, text, x + (w - tw) / 2f, y + 40, 12.5f, Weight.REGULAR, t.c("text.muted"));
+        } else {
+            // шапка таблицы
+            int cName = x + 6, cDim = x + 200, cChunks = x + 300, cForce = x + 350, cCenter = x + 400;
+            Kit.caps(g, t, Words.t("plots.col.name"), cName, y + 5, 10.5f, 0.44f);
+            Kit.caps(g, t, Words.t("plots.col.dim"), cDim, y + 5, 10.5f, 0.44f);
+            Kit.caps(g, t, Words.t("plots.col.chunks"), cChunks, y + 5, 10.5f, 0.44f);
+            Kit.caps(g, t, Words.t("plots.col.force"), cForce, y + 5, 10.5f, 0.44f);
+            Kit.caps(g, t, Words.t("plots.col.center"), cCenter, y + 5, 10.5f, 0.44f);
+            y += 11;
+            int rowH = 24, bottom = wy + wh - 32;
+            int visible = Math.max(1, (bottom - y) / (rowH + 3));
+            plotScroll = Math.max(0, Math.min(plotScroll, list.size() - visible));
+            for (int i = plotScroll; i < list.size() && i < plotScroll + visible; i++) {
+                ClaimsNet.PlotInfo p = list.get(i);
+                boolean hot = Kit.over(mx, my, x, y, w, rowH);
+                Draw.roundBox(g, x, y, w, rowH, 5, hot || menuPlot == p.id() ? Draw.mix(t.c("card.bg"), t.c("text.primary"), 0.04f) : t.c("card.bg"), t.c("card.border"));
+                float cy = y + rowH / 2f;
+                String name = LandCache.plotName(p.id(), p.name());
+                if (renaming == p.id()) {
+                    rename.setX(cName);
+                    rename.setY(y + 3);
+                    rename.setWidth(180);
+                    rename.setHeight(10);
+                    rename.visible = true;
+                    rename.render(g, mx, my, 0);
+                } else {
+                    String shown = Draw.ellipsize(name, 170, 12.5f, Weight.SEMIBOLD);
+                    Draw.label(g, shown, cName, y + 7.5f, 12.5f, Weight.SEMIBOLD, t.c("text.primary"));
+                    if (h.canClaim()) {
+                        float px = cName + Draw.labelWidth(shown, 12.5f, Weight.SEMIBOLD) + 4;
+                        boolean ph = Kit.over(mx, my, (int) px - 1, y + 3, 9, 9);
+                        Icons.draw(g, Icons.Shape.PENCIL, px, y + 4.5f, 6, ph ? t.c("text.primary") : t.c("text.muted"));
+                        int id = p.id();
+                        hits.add((int) px - 1, y + 3, 9, 9, b -> startRename(id, p.name()));
+                    }
+                }
+                String sub = when(p.at());
+                if (!p.by().isEmpty()) sub = sub.isEmpty() ? p.by() : Words.t("plots.claimed_by", sub, p.by());
+                else if (!sub.isEmpty()) sub = Words.t("plots.claimed", sub);
+                Draw.label(g, Draw.ellipsize(sub, 185, 11, Weight.REGULAR), cName, y + 17, 11, Weight.REGULAR, t.c("text.muted"));
+                Draw.label(g, Draw.ellipsize(dimName(p.dim()), 95, 12, Weight.REGULAR), cDim, cy, 12, Weight.REGULAR, t.c("text.secondary"));
+                Draw.label(g, Integer.toString(p.chunks().length), cChunks, cy, 12, Weight.SEMIBOLD, t.c("text.primary"));
+                if (p.forced() > 0) {
+                    Icons.draw(g, Icons.Shape.ANCHOR, cForce, cy - 3, 6, t.c("text.secondary"));
+                    Draw.label(g, Integer.toString(p.forced()), cForce + 9, cy, 12, Weight.REGULAR, t.c("text.secondary"));
+                } else {
+                    Draw.label(g, Words.t("plots.no"), cForce, cy, 12, Weight.REGULAR, t.c("text.dim"));
+                }
+                if (p.chunks().length > 0) {
+                    long c = works.repka.rysclaims.data.Plots.center(LongArrayList.wrap(p.chunks()));
+                    Draw.label(g, Words.t("plots.center", Chunks.x(c) * 16 + 8, Chunks.z(c) * 16 + 8), cCenter, cy, 12, Weight.REGULAR, t.c("text.secondary"));
+                }
+                // «На карте» и меню
+                String map = Words.t("plots.on_map");
+                int bw = (int) Kit.buttonWidth(map, 12);
+                int menuW = Kit.dropdownWidth("···", 40);
+                int bx = x + w - 6 - menuW - 4 - bw;
+                ClaimsNet.PlotInfo plot = p;
+                Kit.button(g, t, hits, bx, y + 5, bw, 14, map, false, mx, my, () -> showOnMap(plot));
+                Kit.Dropdown md = menus.computeIfAbsent(p.id(), k -> new Kit.Dropdown());
+                Kit.dropdown(g, t, hits, md, x + w - 6 - menuW, y + 5, 40, "···", false, mx, my);
+                if (md.open && menuPlot != p.id()) {
+                    Kit.Dropdown prev = menus.get(menuPlot);
+                    if (prev != null) prev.close();
+                    menuPlot = p.id();
+                }
+                y += rowH + 3;
+            }
+            if (list.size() > visible) {
+                String more = Words.t("plots.scroll", plotScroll + 1, Math.min(list.size(), plotScroll + visible), list.size());
+                Draw.label(g, more, x, wy + wh - 22, 11, Weight.REGULAR, t.c("text.muted"));
+            }
+        }
+        // итог последней правки участка
+        ClaimsNet.EditResult res = LandCache.result(RESULT_MS);
+        if (res != null && res.op() >= ClaimsNet.OP_LAND) {
+            String text = Words.result(res);
+            Draw.label(g, Draw.ellipsize(text, w - 160, 11.5f, Weight.REGULAR), x, wy + wh - 13, 11.5f, Weight.REGULAR, res.done() == 0 ? deny(t) : t.c("text.muted"));
+        }
+        // «Занять ещё на карте»
+        String more = Words.t("plots.claim_more");
+        int mw = (int) Kit.buttonWidth(more, 13) + 14;
+        Kit.button(g, t, hits, wx + ww - 12 - mw, wy + wh - 24, mw, 17, more, true, mx, my, () -> setPage(Page.GRID));
+        Kit.Dropdown plotMenu = menus.get(menuPlot);
+        if (plotMenu != null && plotMenu.open) {
+            ClaimsNet.PlotInfo p = LandCache.plot(menuPlot);
+            if (p == null) {
+                plotMenu.close();
+            } else {
+                List<Kit.Option> options = List.of(
+                    new Kit.Option(Words.t("plots.menu.rename"), "", h.canClaim()),
+                    new Kit.Option(Words.t("plots.menu.show"), "", true),
+                    new Kit.Option(Words.t("plots.menu.unload"), "", h.canForce() && p.forced() > 0),
+                    new Kit.Option(Words.t("plots.menu.release"), "", h.canClaim()));
+                Kit.dropdownList(g, t, hits, plotMenu, options, -1, 150, mx, my, i -> {
+                    switch (i) {
+                        case 0 -> startRename(p.id(), p.name());
+                        case 1 -> showOnMap(p);
+                        case 2 -> landEdit(ClaimsNet.LAND_UNLOAD_PLOT, p.id(), false, "");
+                        default -> askRelease(p);
+                    }
+                });
+            }
+        } else {
+            menuPlot = -1;
+        }
+    }
+
+    /** Меню «···» у каждой строки участков: своё на участок, открыто самое большее одно. */
+    private final Map<Integer, Kit.Dropdown> menus = new HashMap<>();
+
+    private boolean menuOpen() {
+        for (Kit.Dropdown d : menus.values()) if (d.open) return true;
+        return false;
+    }
+
+    private void summary(GuiGraphics g, Theme t, int x, int y, int w, Icons.Shape icon, String title, int value, String of, int limit) {
+        Draw.roundBox(g, x, y, w, 38, 6, t.c("card.bg"), t.c("card.border"));
+        Icons.draw(g, icon, x + 8, y + 6, 6.5f, t.c("text.muted"));
+        Draw.label(g, title, x + 18, y + 9.5f, 11.5f, Weight.REGULAR, t.c("text.secondary"));
+        String v = Integer.toString(value);
+        Draw.label(g, v, x + 8, y + 21, 17, Weight.SEMIBOLD, t.c("text.primary"));
+        Draw.label(g, of, x + 8 + Draw.labelWidth(v, 17, Weight.SEMIBOLD) + 4, y + 22, 11.5f, Weight.REGULAR, t.c("text.muted"));
+        int by = y + 30, bw = w - 16;
+        Draw.round(g, x + 8, by, bw, 3, 1.5f, t.c("slot.bg"));
+        if (limit > 0) Draw.round(g, x + 8, by, Math.min(bw, bw * value / (float) limit), 3, 1.5f, value > limit ? deny(t) : t.c("text.secondary"));
+    }
+
+    private void startRename(int id, String current) {
+        renaming = id;
+        rename.setValue(current);
+        rename.setMaxLength(works.repka.rysclaims.data.Plots.MAX_NAME);
+        rename.visible = true;
+        rename.setFocused(true);
+        rename.moveCursorToEnd(false);
+        rename.setHighlightPos(0);
+        setFocused(rename);
+    }
+
+    private void finishRename(boolean save) {
+        if (save && renaming >= 0) landEdit(ClaimsNet.LAND_RENAME, renaming, false, rename.getValue().trim());
+        renaming = -1;
+        rename.visible = false;
+        rename.setFocused(false);
+        setFocused(null);
+    }
+
+    /** «На карте»: окно карты RYSMap на середине участка; без RYSMap сетка этого окна. */
+    private void showOnMap(ClaimsNet.PlotInfo p) {
+        if (p.chunks().length == 0) return;
+        long c = works.repka.rysclaims.data.Plots.center(LongArrayList.wrap(p.chunks()));
+        net.minecraft.resources.ResourceLocation loc = net.minecraft.resources.ResourceLocation.tryParse(p.dim());
+        if (loc == null) return;
+        if (MapApi.get().present()) {
+            ResourceKey<Level> key = ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, loc);
+            MapApi.get().open(MapApi.Target.builder(key, Chunks.x(c) * 16 + 8, 64, Chunks.z(c) * 16 + 8)
+                .label(Component.literal(LandCache.plotName(p.id(), p.name()))).build());
+            return;
+        }
+        switchDim(p.dim());
+        centerX = Chunks.x(c) * 16 + 8;
+        centerZ = Chunks.z(c) * 16 + 8;
+        setPage(Page.GRID);
+    }
+
+    /** Освобождение участка целиком: единственное действие с окном-вопросом (макет 40c). */
+    private void askRelease(ClaimsNet.PlotInfo p) {
+        String name = LandCache.plotName(p.id(), p.name());
+        ClaimsNet.Hello h = LandCache.hello();
+        int seconds = h == null ? 30 : h.releaseSeconds();
+        Kit.Dialog d = new Kit.Dialog(Words.t("plots.release.title", name))
+            .text(Words.t("plots.release.text", Words.chunks(p.chunks().length), seconds));
+        if (p.forced() > 0) d.text(Words.t("plots.release.forced", p.forced()));
+        dialog = d.no(Words.t("plots.release.no"), () -> dialog = null)
+            .yes(Words.t("plots.release.yes"), () -> {
+                dialog = null;
+                landEdit(ClaimsNet.LAND_RELEASE_PLOT, p.id(), false, "");
+            });
+    }
+
+    private void landEdit(int kind, int id, boolean on, String text) {
+        LandCache.clearResult();
+        if (kind == ClaimsNet.LAND_TRUST || kind == ClaimsNet.LAND_UNTRUST || kind == ClaimsNet.LAND_FLAG) LandCache.editedAccess();
+        LandCache.send(new ClaimsNet.LandEdit(kind, id, on, text));
+    }
+
+    // ---- права: доверенные и переключатели (макет 41) ----
+
+    private static final TeamLand.Flag[] SWITCHES = {TeamLand.Flag.OWN_EXPLOSIONS, TeamLand.Flag.MOB_GRIEF, TeamLand.Flag.PVP,
+        TeamLand.Flag.MACHINES_INSIDE, TeamLand.Flag.MACHINES_OUTSIDE};
+
+    /** Строка доверенных игроков: ник с крестиком, «+ Добавить» открывает поле ника. Возвращает низ строки. */
+    private int trusted(GuiGraphics g, Theme t, ClaimsNet.Hello h, boolean edit, int x, int y, int w, int mx, int my) {
+        ClaimsNet.LandState st = LandCache.state();
+        String label = Words.t("rights.trusted.label");
+        Draw.label(g, label, x, y + 7, 12, Weight.REGULAR, t.c("text.secondary"));
+        float cx = x + Draw.labelWidth(label, 12, Weight.REGULAR) + 8;
+        List<ClaimsNet.Trusted> list = st == null ? List.of() : st.trusted();
+        for (ClaimsNet.Trusted tr : list) {
+            float nw = Draw.labelWidth(tr.name(), 12, Weight.REGULAR);
+            int chipW = (int) Math.ceil(5 + nw + (edit ? 4 + 6 : 0) + 5);
+            if (cx + chipW > x + w - 70) break;
+            Draw.roundBox(g, cx, y + 1, chipW, 13, 4, t.c("sidebar.bg"), t.c("panel.border"));
+            Draw.label(g, tr.name(), cx + 5, y + 7.5f, 12, Weight.REGULAR, t.c("text.primary"));
+            if (edit) {
+                float kx = cx + 5 + nw + 4;
+                boolean hot = Kit.over(mx, my, (int) kx - 1, y + 3, 8, 9);
+                Icons.draw(g, Icons.Shape.CROSS, kx, y + 4.5f, 5, hot ? deny(t) : t.c("text.muted"));
+                UUID id = tr.id();
+                hits.add((int) kx - 1, y + 3, 8, 9, b -> landEdit(ClaimsNet.LAND_UNTRUST, 0, false, id.toString()));
+            }
+            cx += chipW + 4;
+        }
+        if (list.isEmpty() && !trusting) {
+            Draw.label(g, Words.t("rights.trusted.none"), cx, y + 7.5f, 11.5f, Weight.REGULAR, t.c("text.muted"));
+            cx += Draw.labelWidth(Words.t("rights.trusted.none"), 11.5f, Weight.REGULAR) + 8;
+        }
+        if (edit) {
+            if (trusting) {
+                trustField.setX((int) cx);
+                trustField.setY(y + 2);
+                trustField.setWidth(90);
+                trustField.setHeight(10);
+                trustField.visible = true;
+                trustField.render(g, mx, my, 0);
+                String ok = Words.t("rights.trusted.ok");
+                int ow = (int) Kit.buttonWidth(ok, 12);
+                Kit.button(g, t, hits, (int) cx + 94, y + 1, ow, 13, ok, true, mx, my, () -> finishTrust(true));
+            } else {
+                String add = Words.t("rights.trusted.add");
+                int aw = (int) Kit.buttonWidth(add, 12);
+                Kit.button(g, t, hits, (int) cx, y + 1, aw, 13, add, false, mx, my, this::startTrust);
+            }
+        }
+        return y + 16;
+    }
+
+    private void startTrust() {
+        trusting = true;
+        trustField.setValue("");
+        trustField.setMaxLength(36);
+        trustField.visible = true;
+        trustField.setFocused(true);
+        setFocused(trustField);
+    }
+
+    private void finishTrust(boolean save) {
+        String name = trustField.getValue().trim();
+        if (save && !name.isEmpty()) landEdit(ClaimsNet.LAND_TRUST, 0, true, name);
+        trusting = false;
+        trustField.visible = false;
+        trustField.setFocused(false);
+        setFocused(null);
+    }
+
+    /** Шесть переключателей в два столбца; закреплённое сервером с замком и словами «решает сервер». */
+    private void switches(GuiGraphics g, Theme t, ClaimsNet.Hello h, boolean edit, int x, int y, int w, int mx, int my) {
+        ClaimsNet.LandState st = LandCache.state();
+        int colW = (w - 16) / 2, rowH = 20;
+        for (int i = 0; i < 6; i++) {
+            int cx = x + (i < 3 ? 0 : colW + 16), cy = y + (i % 3) * rowH;
+            if (i == 5) {
+                visibility(g, t, st, edit, cx, cy, colW, mx, my);
+                continue;
+            }
+            TeamLand.Flag f = SWITCHES[i];
+            String key = "switch." + f.key;
+            Draw.label(g, Words.t(key), cx, cy + 5, 12, Weight.REGULAR, t.c("text.primary"));
+            Draw.label(g, Draw.ellipsize(Words.t(key + ".note"), colW - 30, 10.5f, Weight.REGULAR), cx, cy + 12.5f, 10.5f, Weight.REGULAR, t.c("text.muted"));
+            boolean on = st == null ? f.def : (st.flags() >> f.ordinal() & 1) != 0;
+            String lock = null;
+            if (st != null && (st.lockMask() >> f.ordinal() & 1) != 0) {
+                on = (st.lockValues() >> f.ordinal() & 1) != 0;
+                lock = Words.t("switch.locked", Words.t(on ? "switch.on" : "switch.off"));
+            } else if (f == TeamLand.Flag.PVP && st != null && st.pvpMode() != works.repka.rysclaims.data.Settings.PvpMode.TEAM.ordinal()) {
+                on = st.pvpMode() == works.repka.rysclaims.data.Settings.PvpMode.ALWAYS.ordinal();
+                lock = Words.t("switch.locked", Words.t(on ? "switch.pvp.always" : "switch.pvp.never"));
+            }
+            int tx = cx + colW - 18;
+            if (lock != null) {
+                float lw = Draw.labelWidth(lock, 10.5f, Weight.REGULAR);
+                Draw.label(g, lock, tx - 5 - lw, cy + 8, 10.5f, Weight.REGULAR, t.c("text.muted"));
+                Draw.lock(g, (int) (tx - 5 - lw - 8), cy + 4, t.c("text.muted"));
+            }
+            boolean can = edit && lock == null;
+            boolean hot = can && Kit.over(mx, my, tx, cy + 3, 18, 10);
+            Kit.toggle(g, t, tx, cy + 3, on, hot);
+            if (can) {
+                boolean next = !on;
+                hits.add(tx, cy + 3, 18, 10, b -> landEdit(ClaimsNet.LAND_FLAG, f.ordinal(), next, ""));
+            }
+        }
+    }
+
+    private void visibility(GuiGraphics g, Theme t, ClaimsNet.@Nullable LandState st, boolean edit, int cx, int cy, int colW, int mx, int my) {
+        Draw.label(g, Words.t("switch.visibility"), cx, cy + 5, 12, Weight.REGULAR, t.c("text.primary"));
+        Draw.label(g, Draw.ellipsize(Words.t("switch.visibility.note"), colW - 80, 10.5f, Weight.REGULAR), cx, cy + 12.5f, 10.5f, Weight.REGULAR, t.c("text.muted"));
+        int v = st == null ? 0 : st.visibility();
+        String label = Words.t("visibility." + TeamLand.Visibility.values()[Math.max(0, Math.min(2, v))].key());
+        int dw = Kit.dropdownWidth(label, 80);
+        if (edit) Kit.dropdown(g, t, hits, visDrop, cx + colW - dw, cy + 2, 80, label, v != 0, mx, my);
+        else Draw.label(g, label, cx + colW - Draw.labelWidth(label, 12, Weight.REGULAR), cy + 8, 12, Weight.REGULAR, t.c("text.secondary"));
+    }
+
+    private void visList(GuiGraphics g, Theme t, int mx, int my) {
+        if (!visDrop.open) return;
+        ClaimsNet.LandState st = LandCache.state();
+        List<Kit.Option> options = new ArrayList<>();
+        for (TeamLand.Visibility v : TeamLand.Visibility.values()) options.add(new Kit.Option(Words.t("visibility." + v.key())));
+        Kit.dropdownList(g, t, hits, visDrop, options, st == null ? 0 : st.visibility(), 100, mx, my, i -> landEdit(ClaimsNet.LAND_VISIBILITY, i, false, ""));
+    }
+
     // ---- ввод ----
 
     void toPlayer() {
@@ -1003,7 +1524,21 @@ public final class LandScreen extends ScaledScreen {
 
     @Override
     protected boolean onClick(double x, double y, int button) {
+        if (dialog != null) {
+            hits.click(x, y, button);
+            return true;
+        }
+        if (renaming >= 0 && rename.isMouseOver(x, y)) {
+            rename.mouseClicked(x, y, button);
+            return true;
+        }
+        if (trusting && trustField.isMouseOver(x, y)) {
+            trustField.mouseClicked(x, y, button);
+            return true;
+        }
         if (hits.click(x, y, button)) return true;
+        if (renaming >= 0) finishRename(true);
+        if (trusting) finishTrust(false);
         if (!overCanvas(x, y)) return super.onClick(x, y, button);
         if (button == 0) {
             selecting = true;
@@ -1081,7 +1616,11 @@ public final class LandScreen extends ScaledScreen {
 
     @Override
     protected boolean onScroll(double x, double y, double sx, double sy) {
-        if (presetDrop.scrolled(x, y, sy)) return true;
+        if (presetDrop.scrolled(x, y, sy) || dimDrop.scrolled(x, y, sy) || visDrop.scrolled(x, y, sy)) return true;
+        if (page == Page.PLOTS && sy != 0) {
+            plotScroll += sy > 0 ? -1 : 1;
+            return true;
+        }
         if (overCanvas(x, y) && sy != 0) {
             zoomAt(x, y, sy > 0 ? 1 : -1);
             return true;
@@ -1091,7 +1630,18 @@ public final class LandScreen extends ScaledScreen {
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
-        if (presetDrop.keyPressed(key)) return true;
+        if (dialog != null) return dialog.keyPressed(key);
+        if (renaming >= 0 || trusting) {
+            boolean enter = key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER;
+            if (enter || key == GLFW.GLFW_KEY_ESCAPE) {
+                if (renaming >= 0) finishRename(enter);
+                else finishTrust(enter);
+                return true;
+            }
+            return super.keyPressed(key, scan, modifiers);
+        }
+        if (presetDrop.keyPressed(key) || dimDrop.keyPressed(key) || visDrop.keyPressed(key)) return true;
+        for (Kit.Dropdown d : menus.values()) if (d.keyPressed(key)) return true;
         if (page == Page.GRID) {
             if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && enterAction != null) {
                 enterAction.run();

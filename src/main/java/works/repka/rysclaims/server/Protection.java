@@ -177,10 +177,7 @@ public final class Protection {
     private static boolean homeAllows(ClaimService s, Level level, BlockPos pos, Player player) {
         UUID home = SableLand.home(level, pos);
         if (home == null) return false;
-        if (player instanceof FakePlayer) {
-            TeamLand land = s.data().land(home);
-            if (land != null && !land.flag(TeamLand.Flag.MACHINES_PROFILE)) return false;
-        }
+        if (player instanceof FakePlayer && !s.flag(home, TeamLand.Flag.MACHINES_PROFILE)) return false;
         return s.relation(player.getUUID(), home) == Rights.Relation.TEAM;
     }
 
@@ -381,8 +378,7 @@ public final class Protection {
             UUID owner = s.data().owner(dim, Chunks.pack(e.getBlockX() >> 4, e.getBlockZ() >> 4));
             if (owner == null) continue;
             if (mode == Settings.PvpMode.NEVER) return false;
-            TeamLand land = s.data().land(owner);
-            if (land != null && !land.flag(TeamLand.Flag.PVP)) return false;
+            if (!s.flag(owner, TeamLand.Flag.PVP)) return false;
         }
         return true;
     }
@@ -450,7 +446,7 @@ public final class Protection {
             if (player instanceof FakePlayer fake) return machine(s, fake, dim, chunk, action);
             return s.can(player.getUUID(), dim, chunk, action);
         }
-        if (mob) return land != null && land.flag(TeamLand.Flag.MOB_GRIEF);
+        if (mob) return s.flag(owner, TeamLand.Flag.MOB_GRIEF);
         return s.ownerlessExplosion(dim, center, chunk);
     }
 
@@ -466,8 +462,7 @@ public final class Protection {
         BlockPos w = SableLand.toWorld(level, pos);
         UUID owner = s.data().owner(dim, Chunks.pack(w.getX() >> 4, w.getZ() >> 4));
         if (owner == null) return true;
-        TeamLand land = s.data().land(owner);
-        return land != null && land.flag(TeamLand.Flag.MOB_GRIEF);
+        return s.flag(owner, TeamLand.Flag.MOB_GRIEF);
     }
 
     private static void onMobGrief(EntityMobGriefingEvent e) {

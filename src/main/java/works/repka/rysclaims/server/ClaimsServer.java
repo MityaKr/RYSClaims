@@ -156,6 +156,18 @@ public final class ClaimsServer {
         @Override
         public void forceChanged(UUID team) {
             loaderDirty = true;
+            ClaimSync.landChanged(team);
+        }
+
+        @Override
+        public void landChanged(UUID team) {
+            ClaimSync.landChanged(team);
+        }
+
+        @Override
+        public void plotsChanged(UUID team, java.util.List<works.repka.rysclaims.data.Plots.Event> events) {
+            ClaimSync.landChanged(team);
+            Feed.plots(team, events);
         }
 
         @Override

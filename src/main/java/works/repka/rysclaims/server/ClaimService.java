@@ -8,6 +8,7 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +20,8 @@ import works.repka.rysclaims.data.Chunks;
 import works.repka.rysclaims.data.Claim;
 import works.repka.rysclaims.data.ClaimData;
 import works.repka.rysclaims.data.Limits;
+import works.repka.rysclaims.data.Plot;
+import works.repka.rysclaims.data.Plots;
 import works.repka.rysclaims.data.Rights;
 import works.repka.rysclaims.data.Settings;
 import works.repka.rysclaims.data.TeamLand;
@@ -60,8 +63,10 @@ public final class ClaimService {
         NOT_OWNER,
         /** Чанк освобождается: прогрузку на нём не включить. */
         RELEASING,
-        /** Сервер закрыл командам правку прав. */
-        LOCKED
+        /** Сервер закрыл командам правку прав или закрепил переключатель. */
+        LOCKED,
+        /** Игрок или участок не найден. */
+        NOT_FOUND
     }
 
     /** Итог действия: сколько сделано, сколько пропущено и почему. */
@@ -107,6 +112,12 @@ public final class ClaimService {
 
         /** Кто видит землю команды на карте сменилось: подписчикам регионы заново. */
         default void visibilityChanged(UUID team) {}
+
+        /** Участки команды пересчитаны или переименованы; {@code events}: слияния и разрезы для ленты. */
+        default void plotsChanged(UUID team, List<Plots.Event> events) {}
+
+        /** Переключатели, доверенные или видимость земли команды сменились: окну участников новое состояние. */
+        default void landChanged(UUID team) {}
     }
 
     private final ClaimData data;
@@ -121,7 +132,7 @@ public final class ClaimService {
     /** Последнее слияние на случай отмены: что ушло от команды. */
     private final Map<UUID, Merge> merges = new HashMap<>();
 
-    private record Merge(UUID into, Map<String, LongList> chunks, int bonusClaims, int bonusForce) {}
+    private record Merge(UUID into, Map<String, LongList> chunks, int bonusClaims, int bonusForce, Map<Integer, Integer> plots) {}
 
     public ClaimService(ClaimData data, Supplier<Settings> settings, Teams teams, LongSupplier clock, Hooks hooks) {
         this.data = data;
@@ -134,6 +145,84 @@ public final class ClaimService {
                 if (e.getValue().releasing()) pending.computeIfAbsent(dim, d -> new LongOpenHashSet()).add(e.getLongKey());
             }
         }
+        rebuildPlots();
+    }
+
+    // ---- участки ----
+
+    /**
+     * Пересчёт всех участков без событий в ленту: файл 0.1 (номеров нет), переезд с FTB. Чанк без номера получает номер
+     * соседей или новый участок без имени.
+     */
+    public void rebuildPlots() {
+        Map<UUID, Set<String>> byTeam = new LinkedHashMap<>();
+        for (String dim : data.dimensions()) {
+            for (Claim c : data.claims(dim).values()) byTeam.computeIfAbsent(c.team(), t -> new HashSet<>()).add(dim);
+        }
+        for (Map.Entry<UUID, TeamLand> e : data.lands().entrySet()) {
+            for (Plot p : e.getValue().plots.values()) byTeam.computeIfAbsent(e.getKey(), t -> new HashSet<>()).add(p.dim);
+        }
+        byTeam.forEach((team, dims) -> {
+            for (String dim : dims) Plots.rebuild(data, team, dim);
+        });
+        hooks.dirty();
+    }
+
+    /** Пересчёт участков команды в измерении после перемены её земли; события уходят наружу. */
+    private void plots(UUID team, String dim) {
+        List<Plots.Event> events = Plots.rebuild(data, team, dim);
+        hooks.plotsChanged(team, events);
+    }
+
+    public @Nullable Plot plot(UUID team, int id) {
+        TeamLand land = data.land(team);
+        return land == null ? null : land.plots.get(id);
+    }
+
+    /** Чанки участка. */
+    public LongList plotChunks(UUID team, int id) {
+        LongList out = new LongArrayList();
+        Plot p = plot(team, id);
+        if (p == null) return out;
+        for (Long2ObjectMap.Entry<Claim> e : data.claims(p.dim).long2ObjectEntrySet()) {
+            Claim c = e.getValue();
+            if (c.plot() == id && c.team().equals(team)) out.add(e.getLongKey());
+        }
+        return out;
+    }
+
+    /** Участок чанка или null. */
+    public @Nullable Plot plotAt(String dim, long chunk) {
+        Claim c = data.get(dim, chunk);
+        return c == null ? null : plot(c.team(), c.plot());
+    }
+
+    /** Переименовать участок (право «занимать и освобождать»). Пустое имя возвращает «Участок N». */
+    public boolean renamePlot(@Nullable UUID actor, UUID team, int id, String name, boolean admin) {
+        if (!admin && (actor == null || !manages(actor, team, PERM_CLAIM))) return false;
+        Plot p = plot(team, id);
+        if (p == null) return false;
+        String n = cleanName(name);
+        if (n.equals(p.name)) return true;
+        p.name = n;
+        hooks.plotsChanged(team, List.of());
+        hooks.dirty();
+        return true;
+    }
+
+    /** Имя участка: без управляющих знаков и кодов цвета, не длиннее {@link Plots#MAX_NAME}. */
+    public static String cleanName(String name) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < name.length() && b.length() < Plots.MAX_NAME; i++) {
+            char ch = name.charAt(i);
+            if (ch == '§') {
+                i++; // код цвета за знаком тоже
+                continue;
+            }
+            if (ch < 32 || ch == 127) continue;
+            b.append(ch);
+        }
+        return b.toString().trim();
     }
 
     public ClaimData data() {
@@ -236,7 +325,10 @@ public final class ClaimService {
             data.edited();
             hooks.dirty();
         }
-        if (!r.changed.isEmpty()) hooks.claimed(team, dim, r.changed);
+        if (!r.changed.isEmpty()) {
+            plots(team, dim);
+            hooks.claimed(team, dim, r.changed);
+        }
         return r;
     }
 
@@ -372,7 +464,10 @@ public final class ClaimService {
             byTeam.computeIfAbsent(c.team(), t -> new LongArrayList()).add(chunk);
         }
         for (UUID team : unforced) hooks.forceChanged(team);
-        byTeam.forEach((team, list) -> hooks.released(team, dim, list));
+        byTeam.forEach((team, list) -> {
+            plots(team, dim);
+            hooks.released(team, dim, list);
+        });
         if (!byTeam.isEmpty()) hooks.dirty();
     }
 
@@ -413,36 +508,48 @@ public final class ClaimService {
 
     // ---- правка прав, переключателей, доверенных (окно и команды, проверка права у вызывающего) ----
 
-    private void accessEdited() {
+    private void accessEdited(UUID team) {
         hooks.accessChanged();
+        hooks.landChanged(team);
         hooks.dirty();
     }
 
     public void applyPreset(UUID team, Rights.Preset preset) {
         data.landOrCreate(team).rights.apply(preset);
-        accessEdited();
+        accessEdited(team);
     }
 
     /** Клетка окна «Права» по столбцу 0.1 (команда, союзники, все), с монотонностью. */
     public void toggleRight(UUID team, Rights.Action a, Rights.Column c, boolean on) {
         data.landOrCreate(team).rights.toggle(a, c, on);
-        accessEdited();
+        accessEdited(team);
     }
 
     /** Отметка по столбцу таблицы ({@code Rights.COLUMNS} или {@code team}), без монотонности. */
     public void setRight(UUID team, Rights.Action a, String column, boolean on) {
         data.landOrCreate(team).rights.set(a, column, on);
-        accessEdited();
+        accessEdited(team);
     }
 
     public void setRights(UUID team, Rights rights) {
         data.landOrCreate(team).rights.copyFrom(rights);
-        accessEdited();
+        accessEdited(team);
     }
 
-    public void setFlag(UUID team, TeamLand.Flag f, boolean on) {
+    /** Меняет переключатель; закреплённый сервером не меняется (false). */
+    public boolean setFlag(UUID team, TeamLand.Flag f, boolean on) {
+        if (settings.get().lockedFlags.containsKey(f)) return false;
         data.landOrCreate(team).flag(f, on);
-        accessEdited();
+        accessEdited(team);
+        return true;
+    }
+
+    /** Действующий переключатель земли команды: закреплённый сервером, иначе свой, иначе по умолчанию. */
+    public boolean flag(@Nullable UUID owner, TeamLand.Flag f) {
+        Boolean locked = settings.get().lockedFlags.get(f);
+        if (locked != null) return locked;
+        TeamLand land = owner == null ? null : data.land(owner);
+        return land == null ? f.def : land.flag(f);
     }
 
     public void setVisibility(UUID team, TeamLand.Visibility v) {
@@ -450,6 +557,7 @@ public final class ClaimService {
         if (land.visibility == v) return;
         land.visibility = v;
         hooks.visibilityChanged(team);
+        hooks.landChanged(team);
         hooks.dirty();
     }
 
@@ -457,7 +565,7 @@ public final class ClaimService {
     public boolean trust(UUID team, UUID player, boolean on) {
         TeamLand land = data.landOrCreate(team);
         boolean changed = on ? land.trusted.add(player) : land.trusted.remove(player);
-        if (changed) accessEdited();
+        if (changed) accessEdited(team);
         return changed;
     }
 
@@ -518,15 +626,15 @@ public final class ClaimService {
         UUID owner = data.owner(dim, target);
         if (owner == null) return true;
         TeamLand land = data.land(owner);
-        if (profile != null && (land == null || land.flag(TeamLand.Flag.MACHINES_PROFILE)) && can(profile, dim, target, action)) {
+        if (profile != null && flag(owner, TeamLand.Flag.MACHINES_PROFILE) && can(profile, dim, target, action)) {
             return true;
         }
         if (from != Long.MIN_VALUE && owner.equals(data.owner(dim, from))
             && Math.abs(Chunks.x(from) - Chunks.x(target)) <= reach
             && Math.abs(Chunks.z(from) - Chunks.z(target)) <= reach) {
-            return land == null || land.flag(TeamLand.Flag.MACHINES_INSIDE);
+            return flag(owner, TeamLand.Flag.MACHINES_INSIDE);
         }
-        return land != null && land.flag(TeamLand.Flag.MACHINES_OUTSIDE);
+        return flag(owner, TeamLand.Flag.MACHINES_OUTSIDE);
     }
 
     /** Почему отказано: строка у прицела и в журнале (план, раздел 11, «Что видит игрок при отказе»). */
@@ -589,8 +697,7 @@ public final class ClaimService {
             case ALWAYS -> true;
             case NEVER -> false;
             case OWN -> {
-                TeamLand land = data.land(owner);
-                yield owner.equals(data.owner(dim, center)) && land != null && land.flag(TeamLand.Flag.OWN_EXPLOSIONS);
+                yield owner.equals(data.owner(dim, center)) && flag(owner, TeamLand.Flag.OWN_EXPLOSIONS);
             }
         };
     }
@@ -610,8 +717,9 @@ public final class ClaimService {
     public void merged(UUID from, UUID into) {
         TeamLand src = data.land(from);
         int bc = src == null ? 0 : src.bonusClaims, bf = src == null ? 0 : src.bonusForce;
-        var moved = data.transfer(from, into);
-        merges.put(from, new Merge(into, moved, bc, bf));
+        Map<Integer, Integer> plotMap = new HashMap<>();
+        var moved = data.transfer(from, into, plotMap);
+        merges.put(from, new Merge(into, moved, bc, bf, plotMap));
         after(from, into, moved);
     }
 
@@ -621,6 +729,7 @@ public final class ClaimService {
         for (Map.Entry<String, LongList> e : m.chunks.entrySet()) {
             for (long chunk : e.getValue()) data.reassign(e.getKey(), chunk, from);
         }
+        data.restorePlots(from, into, m.plots);
         TeamLand dst = data.landOrCreate(into), src = data.landOrCreate(from);
         dst.bonusClaims -= m.bonusClaims;
         dst.bonusForce -= m.bonusForce;
@@ -631,6 +740,8 @@ public final class ClaimService {
 
     private void after(UUID from, UUID to, Map<String, LongList> moved) {
         moved.forEach((dim, list) -> {
+            plots(from, dim);
+            plots(to, dim);
             hooks.released(from, dim, list);
             hooks.claimed(to, dim, list);
         });

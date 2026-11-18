@@ -80,6 +80,9 @@ public final class Commands {
             .then(lit("always").executes(c -> loadMode(c, Settings.LoadMode.ALWAYS))));
         root.then(lit("info").executes(Commands::info));
         root.then(lit("list").executes(c -> list(c, own(c))));
+        root.then(lit("name").executes(c -> rename(c, ""))
+            .then(net.minecraft.commands.Commands.argument("name", StringArgumentType.greedyString())
+                .executes(c -> rename(c, StringArgumentType.getString(c, "name")))));
         root.then(lit("log").executes(c -> log(c, own(c), 1))
             .then(net.minecraft.commands.Commands.argument("page", IntegerArgumentType.integer(1, 100))
                 .executes(c -> log(c, own(c), IntegerArgumentType.getInteger(c, "page")))));
@@ -277,6 +280,7 @@ public final class Commands {
             case NOT_OWNER -> Msg.t("skip.not_owner", "not your land");
             case RELEASING -> Msg.t("skip.releasing", "being released");
             case LOCKED -> Msg.t("skip.locked", "locked by the server");
+            case NOT_FOUND -> Msg.t("skip.not_found", "not found");
         };
     }
 
@@ -322,6 +326,9 @@ public final class Commands {
             return 1;
         }
         MutableComponent line = Msg.t("info.owner", "Chunk %s, %s: land of %s", cx, cz, teamName(s, claim.team()));
+        works.repka.rysclaims.data.Plot plot = s.plot(claim.team(), claim.plot());
+        if (plot != null) line.append(" · ").append(plotName(plot));
+        if (claim.by() != null) line.append(" · ").append(Msg.t("info.by", "claimed by %s", playerName(src.getServer(), claim.by())));
         if (claim.force()) line.append(" · ").append(Msg.t("info.loaded", "force loaded"));
         if (claim.releasing()) {
             long left = Math.max(0, (claim.releaseAt() - System.currentTimeMillis() + 999) / 1000);
@@ -338,6 +345,36 @@ public final class Commands {
             if (s.bypass(id)) can.append(" · ").append(Msg.t("info.bypass", "operator mode: protection off"));
             src.sendSuccess(() -> can.withStyle(ChatFormatting.GRAY), false);
         }
+        return 1;
+    }
+
+    /** Имя участка; пустое это «Участок N». */
+    static Component plotName(works.repka.rysclaims.data.Plot p) {
+        return p.name.isEmpty() ? Msg.t("plot.unnamed", "Plot %s", p.id) : Component.literal(p.name);
+    }
+
+    static String playerName(net.minecraft.server.MinecraftServer server, UUID id) {
+        var cache = server.getProfileCache();
+        return cache == null ? id.toString().substring(0, 8) : cache.get(id).map(GameProfile::getName).orElse(id.toString().substring(0, 8));
+    }
+
+    /** {@code /claims name [имя]}: переименовать участок под ногами (право «занимать и освобождать»); без имени «Участок N». */
+    private static int rename(CommandContext<CommandSourceStack> c, String name) throws CommandSyntaxException {
+        ClaimService s = service();
+        CommandSourceStack src = c.getSource();
+        UUID player = src.getPlayerOrException().getUUID();
+        String dim = Loader.id(src.getLevel().dimension());
+        long chunk = Chunks.pack(net.minecraft.util.Mth.floor(src.getPosition().x) >> 4, net.minecraft.util.Mth.floor(src.getPosition().z) >> 4);
+        Claim claim = s.data().get(dim, chunk);
+        UUID team = s.teams().teamOf(player);
+        if (claim == null || !claim.team().equals(team)) {
+            throw new SimpleCommandExceptionType(Msg.t("error.not_own_plot", "Stand on your team's land")).create();
+        }
+        if (!s.renamePlot(player, team, claim.plot(), name, s.bypass(player))) {
+            throw new SimpleCommandExceptionType(Msg.t("error.no_right", "Your role in the team cannot do this")).create();
+        }
+        works.repka.rysclaims.data.Plot p = s.plot(team, claim.plot());
+        src.sendSuccess(() -> Msg.t("plot.renamed", "Plot renamed: %s", p == null ? Component.literal("?") : plotName(p)), false);
         return 1;
     }
 
@@ -362,7 +399,7 @@ public final class Commands {
             int count = 0;
             for (LongList g : groups) count += g.size();
             int total = count;
-            src.sendSuccess(() -> Msg.t("list.dim", "%s: %s chunks in %s pieces", dim, total, groups.size()), false);
+            src.sendSuccess(() -> Msg.t("list.dim", "%s: %s chunks in %s plots", dim, total, groups.size()), false);
             int shown = 0;
             for (LongList g : groups) {
                 if (shown++ == 8) {
@@ -374,8 +411,10 @@ public final class Commands {
                 int forced = 0;
                 for (int i = 0; i < g.size(); i++) if (s.data().get(dim, g.getLong(i)).force()) forced++;
                 int f = forced;
-                src.sendSuccess(() -> Msg.t("list.piece", "  %s chunks near %s, %s (force loaded %s)",
-                    g.size(), Chunks.x(center) * 16 + 8, Chunks.z(center) * 16 + 8, f).withStyle(ChatFormatting.GRAY), false);
+                works.repka.rysclaims.data.Plot plot = s.plotAt(dim, g.getLong(0));
+                Component name = plot == null ? Component.literal("?") : plotName(plot);
+                src.sendSuccess(() -> Msg.t("list.plot", "  %s: %s chunks near %s, %s (force loaded %s)",
+                    name, g.size(), Chunks.x(center) * 16 + 8, Chunks.z(center) * 16 + 8, f).withStyle(ChatFormatting.GRAY), false);
             }
         }
         long[] rel = s.releasing(team);
@@ -422,7 +461,7 @@ public final class Commands {
         }
         MutableComponent flags = Msg.t("rights.flags", "  Switches:");
         TeamLand l = land;
-        for (TeamLand.Flag f : TeamLand.Flag.values()) flags.append(" " + f.key + " ").append(Msg.yesNo(l == null ? f.def : l.flag(f)));
+        for (TeamLand.Flag f : TeamLand.Flag.values()) flags.append(" " + f.key + " ").append(Msg.yesNo(s.flag(team, f)));
         flags.append(" visibility " + (l == null ? TeamLand.Visibility.ALL.key() : l.visibility.key()));
         c.getSource().sendSuccess(() -> flags.withStyle(ChatFormatting.GRAY), false);
         return 1;
@@ -454,7 +493,7 @@ public final class Commands {
     private static int setFlag(CommandContext<CommandSourceStack> c, TeamLand.Flag f, boolean on) throws CommandSyntaxException {
         ClaimService s = service();
         UUID team = rightsTeam(c, s);
-        s.setFlag(team, f, on);
+        if (!s.setFlag(team, f, on)) throw new SimpleCommandExceptionType(Msg.t("error.flag_locked", "The server fixed this switch")).create();
         c.getSource().sendSuccess(() -> Msg.t("flag.set", "%s: %s", f.key, Msg.yesNo(on)), false);
         return 1;
     }
