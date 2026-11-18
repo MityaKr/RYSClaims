@@ -186,6 +186,7 @@ public final class Protection {
 
     /** Фейковый игрок: список имён команды, затем профиль и «Машины снаружи». Место не доверяем. */
     static boolean machine(ClaimService s, FakePlayer fake, String dim, long chunk, Rights.Action action) {
+        if (Machines.vouched()) return true;
         UUID owner = s.data().owner(dim, chunk);
         if (owner == null) return !s.settings().wildernessClosed(dim) || s.can(fake.getUUID(), dim, chunk, action);
         TeamLand land = s.data().land(owner);

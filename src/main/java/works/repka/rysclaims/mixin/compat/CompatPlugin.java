@@ -14,16 +14,17 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
  * его версией RYSClaims работает, перехват просто не встаёт (строка в логе Mixin).
  */
 public final class CompatPlugin implements IMixinConfigPlugin {
-    private static final Map<String, String> MODS = Map.of(
-        "Ae2", "ae2",
-        "Oritech", "oritech",
-        "Cyclic", "cyclic",
-        "Ie", "immersiveengineering",
-        "Rftools", "rftoolsbuilder",
-        "Enderio", "enderio",
-        "Occultism", "occultism",
-        "Draconic", "draconicevolution",
-        "Sable", "sable");
+    private static final Map<String, String> MODS = Map.ofEntries(
+        Map.entry("Ae2", "ae2"),
+        Map.entry("Oritech", "oritech"),
+        Map.entry("Cyclic", "cyclic"),
+        Map.entry("Ie", "immersiveengineering"),
+        Map.entry("Rftools", "rftoolsbuilder"),
+        Map.entry("Enderio", "enderio"),
+        Map.entry("Occultism", "occultism"),
+        Map.entry("Draconic", "draconicevolution"),
+        Map.entry("Sable", "sable"),
+        Map.entry("Create", "create"));
 
     @Override
     public void onLoad(String mixinPackage) {}

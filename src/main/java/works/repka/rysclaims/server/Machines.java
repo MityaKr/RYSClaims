@@ -1,5 +1,6 @@
 package works.repka.rysclaims.server;
 
+import java.lang.reflect.Field;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -9,7 +10,9 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
+import works.repka.rysclaims.compat.create.ContraptionPlace;
 import works.repka.rysclaims.compat.sable.SableLand;
 import works.repka.rysclaims.data.Chunks;
 import works.repka.rysclaims.data.Rights;
@@ -38,6 +41,93 @@ public final class Machines {
         BlockPos from = be.getLevel() == level ? be.getBlockPos() : null;
         return at(level, from, null, target, name(be), FAR);
     }
+
+    /** То же, уровень берётся у самой блок-сущности. */
+    public static boolean blockEntity(Object self, @Nullable BlockPos target) {
+        if (!(self instanceof BlockEntity be) || target == null) return true;
+        return blockEntity(be, be.getLevel(), target);
+    }
+
+    /**
+     * Постройка Create действует в {@code target} (бур, пила, каток, комбайн, плуг на ней): место это её якорь
+     * ({@link ContraptionPlace}), хозяина у постройки нет. {@code movementContext} это {@code MovementContext} Create,
+     * его поля берутся отражением.
+     */
+    public static boolean contraption(@Nullable Object movementContext, BlockPos target) {
+        if (movementContext == null) return true;
+        try {
+            Field[] f = CONTEXT.get(movementContext.getClass());
+            if (!(f[0].get(movementContext) instanceof Level level)) return true;
+            Object contraption = f[1].get(movementContext);
+            String name = f[2].get(movementContext) instanceof BlockState st ? BuiltInRegistries.BLOCK.getKey(st.getBlock()).toString() : "create:actor";
+            return contraptionAt(level, contraption, target, name);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return true;
+        }
+    }
+
+    /** Постройка {@code contraption} (её сборка, разборка, работник на ней) трогает блок {@code target}. */
+    public static boolean contraptionAt(Level level, @Nullable Object contraption, BlockPos target, String name) {
+        BlockPos from = contraption instanceof ContraptionPlace p ? p.rysclaims$place() : null;
+        if (from == null) return at(level, null, null, target, name, FAR);
+        return at(level, from, null, target, name + " @" + from.getX() + " " + from.getY() + " " + from.getZ(), FAR);
+    }
+
+    /** Поведение блок-сущности Create ({@code BlockEntityBehaviour}): его блок-сущность из поля {@code blockEntity}. */
+    public static @Nullable BlockEntity behaviourEntity(Object behaviour) {
+        try {
+            Field f = OWNER.get(behaviour.getClass());
+            return f != null && f.get(behaviour) instanceof BlockEntity be ? be : null;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Машина, которая сейчас работает в этом потоке (механическая рука Create в своём тике), или null. */
+    public static @Nullable BlockEntity actor() {
+        return ACTOR.get();
+    }
+
+    public static void actor(@Nullable Object be) {
+        ACTOR.set(be instanceof BlockEntity b ? b : null);
+    }
+
+    /**
+     * Фейковый игрок сейчас действует за машину, которую уже проверили по месту (плуг Create: правило постройки
+     * решено в начале шага, а вспашка идёт событиями от общего профиля «Plough»). {@link Protection} ему не отказывает.
+     */
+    public static boolean vouched() {
+        return VOUCHED.get() == Boolean.TRUE;
+    }
+
+    public static void vouch(boolean on) {
+        VOUCHED.set(on ? Boolean.TRUE : null);
+    }
+
+    private static final ThreadLocal<BlockEntity> ACTOR = new ThreadLocal<>();
+    private static final ThreadLocal<Boolean> VOUCHED = new ThreadLocal<>();
+
+    private static final ClassValue<Field[]> CONTEXT = new ClassValue<>() {
+        @Override
+        protected Field[] computeValue(Class<?> type) {
+            try {
+                return new Field[] {type.getField("world"), type.getField("contraption"), type.getField("state")};
+            } catch (NoSuchFieldException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    };
+
+    private static final ClassValue<Field> OWNER = new ClassValue<>() {
+        @Override
+        protected Field computeValue(Class<?> type) {
+            try {
+                return type.getField("blockEntity");
+            } catch (NoSuchFieldException e) {
+                return null;
+            }
+        }
+    };
 
     /** Сущность-работник (дух Occultism): профиль её хозяина, место её позиция, дальность обычная. */
     public static boolean entity(@Nullable Entity worker, BlockPos target) {
