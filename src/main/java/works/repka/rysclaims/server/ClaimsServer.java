@@ -101,6 +101,10 @@ public final class ClaimsServer {
         MinecraftServer srv = server;
         if (s == null || srv == null) return;
         ticks++;
+        if (settingsPending) {
+            settingsPending = false;
+            settingsChanged();
+        }
         if (ticks % 20 == 0) {
             s.tick();
             dropBypass(srv, s);
@@ -160,6 +164,13 @@ public final class ClaimsServer {
         if (srv == null || d == null) return;
         d.setDirty();
         srv.overworld().getDataStorage().save();
+    }
+
+    private static volatile boolean settingsPending;
+
+    /** Файл настроек перечитан (поток слежения за файлами): {@link #settingsChanged} на ближайшем тике. */
+    public static void settingsChangedLater() {
+        settingsPending = true;
     }
 
     /** Оператор поменял настройку в окне: права новых команд, версия прав, регионы заново (видимость земли). */

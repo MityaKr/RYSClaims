@@ -41,7 +41,12 @@ public final class RYSClaims {
         container.registerConfig(ModConfig.Type.SERVER, ServerConfig.SPEC);
         container.registerConfig(ModConfig.Type.COMMON, works.repka.rysclaims.compat.LinksConfig.SPEC, works.repka.rysclaims.compat.Links.FILE);
         modBus.addListener((ModConfigEvent.Loading e) -> ServerConfig.invalidate());
-        modBus.addListener((ModConfigEvent.Reloading e) -> ServerConfig.invalidate());
+        modBus.addListener((ModConfigEvent.Reloading e) -> {
+            ServerConfig.invalidate();
+            // правка файла на работающем сервере: права новых команд и версия прав пересчитаются в главном потоке
+            // (перепроверка 18.11, пункт 10; событие приходит из потока слежения за файлами)
+            if (e.getConfig().getSpec() == ServerConfig.SPEC) ClaimsServer.settingsChangedLater();
+        });
         modBus.addListener(Loader::register);
         modBus.addListener(works.repka.rysclaims.net.ClaimsNet::register);
         if (net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) works.repka.rysclaims.client.ClaimsClient.init(modBus);
