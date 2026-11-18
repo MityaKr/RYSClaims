@@ -760,6 +760,8 @@ public final class ClaimService {
         if (team.equals(player) || data.claimed(player) == 0) return false;
         if (data.claimed(team) + data.claimed(player) > limits(team).claims) return false;
         var moved = data.transfer(player, team);
+        // только эти чанки игрок может забрать при уходе
+        for (Map.Entry<String, LongList> e : moved.entrySet()) for (long chunk : e.getValue()) data.brought(e.getKey(), chunk, true);
         PlayerBonus b = data.bonus(player);
         if (b != null) b.keepPersonal = false;
         after(player, team, moved);
@@ -779,13 +781,16 @@ public final class ClaimService {
         hooks.dirty();
     }
 
-    /** Чанки команды, которые принёс игрок (поле {@code by}): их можно забрать при уходе (план, раздел 8). */
+    /**
+     * Чанки команды, которые игрок принёс из личной земли (пометка {@code brought}, перепроверка 18.11, пункт 1): их можно
+     * забрать при уходе (план, раздел 8). Занятое им для команды (поле {@code by}) остаётся команде.
+     */
     public Map<String, LongList> broughtBy(UUID team, UUID player) {
         Map<String, LongList> out = new LinkedHashMap<>();
         for (String dim : data.dimensions()) {
             for (Long2ObjectMap.Entry<Claim> e : data.claims(dim).long2ObjectEntrySet()) {
                 Claim c = e.getValue();
-                if (c.team().equals(team) && player.equals(c.by()) && !c.releasing()) out.computeIfAbsent(dim, d -> new LongArrayList()).add(e.getLongKey());
+                if (c.team().equals(team) && c.brought() && player.equals(c.by()) && !c.releasing()) out.computeIfAbsent(dim, d -> new LongArrayList()).add(e.getLongKey());
             }
         }
         return out;
@@ -805,6 +810,8 @@ public final class ClaimService {
             for (long chunk : e.getValue()) {
                 if (n >= room) break;
                 data.reassign(e.getKey(), chunk, to);
+                // в личную землю чанк вернулся: снова личный, не «принесённый»
+                if (to.equals(player)) data.brought(e.getKey(), chunk, false);
                 moved.computeIfAbsent(e.getKey(), d -> new LongArrayList()).add(chunk);
                 n++;
             }

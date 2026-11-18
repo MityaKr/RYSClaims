@@ -359,12 +359,15 @@ class ClaimServiceTest {
         assertTrue(service.joined(TEAM, newbie), "передумал: «Отдать» через команду");
         assertFalse(service.personalPending(newbie));
 
-        // принесённое новичком помечено by; уйдя, он его забирает
+        // принесённое из личной земли помечено; занятое для команды остаётся команде (перепроверка 18.11, пункт 1)
         service.claim(newbie, TEAM, OW, one(40, 40), false);
-        assertEquals(10, service.broughtBy(TEAM, newbie).get(OW).size(), "отданная личная земля тоже его");
+        assertEquals(9, service.broughtBy(TEAM, newbie).get(OW).size(), "только отданная личная земля");
+        assertTrue(ClaimData.load(data.save(), settings.defaultRights).get(OW, Chunks.pack(20, 20)).brought(), "пометка переживает перезапуск");
         teams.leave(newbie);
-        assertEquals(10, service.takeBack(newbie, TEAM));
-        assertEquals(newbie, data.owner(OW, Chunks.pack(40, 40)));
+        assertEquals(9, service.takeBack(newbie, TEAM));
+        assertEquals(newbie, data.owner(OW, Chunks.pack(20, 20)));
+        assertFalse(data.get(OW, Chunks.pack(20, 20)).brought(), "вернувшийся чанк снова личный");
+        assertEquals(TEAM, data.owner(OW, Chunks.pack(40, 40)), "занятое для команды не забрать");
 
         // распад: отсчёт 7 дней, защита держится
         service.claim(LEADER, TEAM, OW, one(60, 60), false);

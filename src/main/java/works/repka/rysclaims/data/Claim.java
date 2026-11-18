@@ -12,8 +12,13 @@ public final class Claim {
     final String dimension;
     final long pos;
     final UUID team;
-    /** Кто принёс чанк в команду: показывается у участка, по нему ушедший забирает свои чанки. */
+    /** Кто занял чанк: показывается у участка. */
     final @Nullable UUID by;
+    /**
+     * Чанк принесён в команду игроком {@link #by} из личной земли (ответ «Отдать» при вступлении): только такие чанки
+     * ушедший может забрать (перепроверка 18.11, пункт 1). Занятое для команды остаётся команде.
+     */
+    boolean brought;
     /** Когда занят, мс от эпохи. */
     final long at;
     /** Номер участка команды ({@link Plots}); 0: ещё не посчитан. */
@@ -48,6 +53,10 @@ public final class Claim {
 
     public long at() {
         return at;
+    }
+
+    public boolean brought() {
+        return brought;
     }
 
     public int plot() {

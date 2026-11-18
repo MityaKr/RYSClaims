@@ -28,7 +28,7 @@ import org.jetbrains.annotations.Nullable;
  * ids: [uuid…]                       команды по номерам, на них ссылается поле team у чанка
  * teams: { uuid: { bonusClaims, bonusForce, lastSeen, loadMode, loadHours, visibility, rights, flags, trusted,
  *                  machineNames, legacy?, plots: [ { id, name, dim } ], nextPlot } }
- * claims: { измерение: [ { pos, team, by?, at, plot, force, releaseAt } ] }
+ * claims: { измерение: [ { pos, team, by?, brought?, at, plot, force, releaseAt } ] }
  * players: { uuid: { bonusClaims, bonusForce } }
  * archive: [ … ]                     распавшиеся команды (0.2), хранится как есть
  * </pre>
@@ -274,12 +274,20 @@ public final class ClaimData {
         }
     }
 
+    /** Пометка «принесён из личной земли» ({@link Claim#brought}). */
+    public void brought(String dimension, long chunk, boolean on) {
+        Long2ObjectOpenHashMap<Claim> map = dims.get(dimension);
+        Claim c = map == null ? null : map.get(chunk);
+        if (c != null) c.brought = on;
+    }
+
     /** Переписывает чанк на другую команду, сохраняя время, прогрузку и отсчёт. */
     public void reassign(String dimension, long chunk, UUID team) {
         Long2ObjectOpenHashMap<Claim> map = dims.get(dimension);
         Claim old = map == null ? null : map.get(chunk);
         if (old == null || old.team.equals(team)) return;
         Claim c = new Claim(dimension, chunk, team, old.by, old.at);
+        c.brought = old.brought;
         c.plot = old.plot;
         c.force = old.force;
         c.releaseAt = old.releaseAt;
@@ -356,6 +364,7 @@ public final class ClaimData {
                 t.putLong("pos", x.getLongKey());
                 t.putInt("team", team);
                 if (c.by != null) t.putUUID("by", c.by);
+                if (c.brought) t.putBoolean("brought", true);
                 t.putLong("at", c.at);
                 t.putInt("plot", c.plot);
                 t.putBoolean("force", c.force);
@@ -416,6 +425,7 @@ public final class ClaimData {
                 Claim c = data.put(dim, t.getLong("pos"), team, t.hasUUID("by") ? t.getUUID("by") : null, t.getLong("at"));
                 if (c == null) continue;
                 c.plot = t.getInt("plot");
+                c.brought = t.getBoolean("brought");
                 data.setForce(c, t.getBoolean("force"));
                 c.releaseAt = t.getLong("releaseAt");
             }
