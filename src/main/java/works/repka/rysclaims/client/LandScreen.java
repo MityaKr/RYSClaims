@@ -959,6 +959,7 @@ public final class LandScreen extends ScaledScreen {
         r.toggle(a, c, on);
         askedBits = r.bits();
         LandCache.clearResult();
+        LandCache.editedAccess();
         LandCache.send(new ClaimsNet.RightsEdit(ClaimsNet.RIGHTS_CELL, a.ordinal(), c.ordinal(), on, 0));
     }
 
@@ -967,6 +968,7 @@ public final class LandScreen extends ScaledScreen {
         remember(h, now);
         askedBits = Rights.of(p).bits();
         LandCache.clearResult();
+        LandCache.editedAccess();
         LandCache.send(new ClaimsNet.RightsEdit(ClaimsNet.RIGHTS_PRESET, 0, 0, false, p.ordinal()));
     }
 
@@ -974,6 +976,7 @@ public final class LandScreen extends ScaledScreen {
         if (undoBits < 0) return;
         askedBits = undoBits;
         askedOver = h;
+        LandCache.editedAccess();
         LandCache.send(new ClaimsNet.RightsEdit(ClaimsNet.RIGHTS_TABLE, 0, 0, false, undoBits));
         undoBits = -1;
     }

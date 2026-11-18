@@ -67,6 +67,14 @@ public final class ClaimSync {
     private static final Set<UUID> TOUCHED = new HashSet<>();
     private static boolean all;
     private static int ticks;
+    /**
+     * Версия прав (план 9.2, «Гашение нажатия»): растёт при любой перемене, от которой зависит, что игроку можно на чужой
+     * земле (права, переключатели, доверенные, роли, союзы, состав команды, режим оператора). После роста все подписчики
+     * на ближайшем тике получают {@code Hello} и {@code Access} по всем известным им командам с новой версией: клиент
+     * гасит нажатие только по записи не старше версии своего {@code Hello}.
+     */
+    private static int epoch = 1;
+    private static boolean accessDirty;
 
     private ClaimSync() {}
 
@@ -90,6 +98,18 @@ public final class ClaimSync {
         CHANGED.clear();
         TOUCHED.clear();
         all = false;
+        accessDirty = false;
+    }
+
+    /** Права на чьей-то земле могли смениться: версия прав растёт, рассылка на ближайшем тике. */
+    public static void accessChanged() {
+        if (!accessDirty) epoch++;
+        accessDirty = true;
+    }
+
+    /** Текущая версия прав (для проверок). */
+    public static int epoch() {
+        return epoch;
     }
 
     /** Имена или цвета команд могли смениться: всем подписчикам их регионы заново. */
@@ -120,6 +140,7 @@ public final class ClaimSync {
             CHANGED.clear();
             TOUCHED.clear();
             all = false;
+            accessDirty = false;
             return;
         }
         long now = System.currentTimeMillis();
@@ -144,12 +165,14 @@ public final class ClaimSync {
             flush(server, s);
         }
         boolean second = ticks % 20 == 0;
-        if (second || !TOUCHED.isEmpty()) {
+        boolean access = accessDirty;
+        accessDirty = false;
+        if (second || access || !TOUCHED.isEmpty()) {
             for (Map.Entry<UUID, Viewer> e : VIEWERS.entrySet()) {
                 ServerPlayer p = server.getPlayerList().getPlayer(e.getKey());
                 if (p == null) continue;
-                if (second || TOUCHED.contains(s.teams().teamOf(p.getUUID()))) sendHello(s, p, e.getValue(), false);
-                if (second) sendAccess(s, p, e.getValue());
+                if (second || access || TOUCHED.contains(s.teams().teamOf(p.getUUID()))) sendHello(s, p, e.getValue(), false);
+                if (second || access) sendAccess(s, p, e.getValue(), access);
             }
             TOUCHED.clear();
         }
@@ -213,7 +236,7 @@ public final class ClaimSync {
 
         void send() {
             if (chunks.isEmpty()) return;
-            ClaimsNet.send(p, new ClaimsNet.Diff(v.dimension, List.copyOf(palette), chunks.toLongArray(), codes.toByteArray()));
+            ClaimsNet.send(p, new ClaimsNet.Diff(v.dimension, epoch, List.copyOf(palette), chunks.toLongArray(), codes.toByteArray()));
             index.clear();
             palette.clear();
             chunks.clear();
@@ -317,23 +340,21 @@ public final class ClaimSync {
             ClaimsNet.send(player, new ClaimsNet.EditResult(ClaimsNet.OP_RIGHTS, 0, skipped(r)));
             return;
         }
-        Rights rights = s.data().landOrCreate(team).rights;
         Rights.Action[] actions = Rights.Action.values();
         switch (e.kind()) {
             case ClaimsNet.RIGHTS_CELL -> {
                 if (e.action() < 0 || e.action() >= actions.length || e.column() < 0 || e.column() >= Rights.Column.values().length) return;
-                rights.toggle(actions[e.action()], Rights.Column.values()[e.column()], e.on());
+                s.toggleRight(team, actions[e.action()], Rights.Column.values()[e.column()], e.on());
             }
             case ClaimsNet.RIGHTS_PRESET -> {
                 if (e.value() < 0 || e.value() >= Rights.Preset.values().length) return;
-                rights.apply(Rights.Preset.values()[e.value()]);
+                s.applyPreset(team, Rights.Preset.values()[e.value()]);
             }
-            case ClaimsNet.RIGHTS_TABLE -> rights.copyFrom(Rights.fromBits(e.value()));
+            case ClaimsNet.RIGHTS_TABLE -> s.setRights(team, Rights.fromBits(e.value()));
             default -> {
                 return;
             }
         }
-        ClaimsServer.markDirty();
         touch(team);
         r.done = 1;
         ClaimsNet.send(player, new ClaimsNet.EditResult(ClaimsNet.OP_RIGHTS, 1, skipped(r)));
@@ -346,7 +367,7 @@ public final class ClaimSync {
         RegionBytes.Built b = RegionBytes.build(chunk -> s.data().get(dim, chunk), rx, rz);
         List<ClaimsNet.TeamEntry> palette = new ArrayList<>(b.palette().size());
         for (UUID team : b.palette()) palette.add(entry(s, p, v, team));
-        ClaimsNet.send(p, new ClaimsNet.Region(dim, rx, rz, palette, RegionBytes.encode(b.codes())));
+        ClaimsNet.send(p, new ClaimsNet.Region(dim, rx, rz, epoch, palette, RegionBytes.encode(b.codes())));
     }
 
     private static ClaimsNet.TeamEntry entry(ClaimService s, ServerPlayer p, Viewer v, UUID team) {
@@ -362,18 +383,20 @@ public final class ClaimSync {
         return bits;
     }
 
-    private static void sendAccess(ClaimService s, ServerPlayer p, Viewer v) {
+    /** Что изменилось в правах игрока; {@code all}: все известные ему команды (версия прав выросла, записи надо освежить). */
+    private static void sendAccess(ClaimService s, ServerPlayer p, Viewer v, boolean all) {
         if (v.access.isEmpty()) return;
         List<UUID> teams = new ArrayList<>();
         java.io.ByteArrayOutputStream bits = new java.io.ByteArrayOutputStream();
         for (var e : v.access.object2IntEntrySet()) {
             int now = access(s, p.getUUID(), e.getKey());
-            if (now == e.getIntValue()) continue;
+            if (now == e.getIntValue() && !all) continue;
             e.setValue(now);
             teams.add(e.getKey());
             bits.write(now);
+            if (teams.size() >= 4096) break;
         }
-        if (!teams.isEmpty()) ClaimsNet.send(p, new ClaimsNet.Access(teams, bits.toByteArray()));
+        if (!teams.isEmpty()) ClaimsNet.send(p, new ClaimsNet.Access(epoch, teams, bits.toByteArray()));
     }
 
     static ClaimsNet.Hello hello(ClaimService s, UUID id) {
@@ -389,7 +412,7 @@ public final class ClaimSync {
             s.data().claimed(team), lim.claims, s.data().forced(team), lim.force, (int) rel[0], rel[1],
             s.manages(id, team, ClaimService.PERM_CLAIM), s.manages(id, team, ClaimService.PERM_FORCE),
             s.editsRights(id, team, admin), !s.settings().teamsEditRights, rights.bits(), land == null ? 0 : land.trusted.size(),
-            s.settings().releaseSeconds, admin);
+            s.settings().releaseSeconds, admin, epoch);
     }
 
     private static void sendHello(ClaimService s, ServerPlayer p, Viewer v, boolean force) {

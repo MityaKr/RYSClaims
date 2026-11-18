@@ -93,7 +93,7 @@ public final class ClaimsNet {
     public record Hello(UUID team, String name, int color, boolean solo, String role, int members,
                         int claimed, int claimLimit, int forced, int forceLimit, int releasing, long releaseIn,
                         boolean canClaim, boolean canForce, boolean canRights, boolean rightsLocked, int rights, int trusted,
-                        int releaseSeconds, boolean bypass) implements CustomPacketPayload {
+                        int releaseSeconds, boolean bypass, int epoch) implements CustomPacketPayload {
         public static final Type<Hello> TYPE = new Type<>(id("hello"));
         public static final StreamCodec<FriendlyByteBuf, Hello> CODEC = CustomPacketPayload.codec(Hello::write, Hello::read);
 
@@ -101,7 +101,7 @@ public final class ClaimsNet {
             return new Hello(b.readUUID(), b.readUtf(64), b.readInt(), b.readBoolean(), b.readUtf(16), b.readVarInt(),
                 b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarLong(),
                 b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readInt(), b.readVarInt(),
-                b.readVarInt(), b.readBoolean());
+                b.readVarInt(), b.readBoolean(), b.readVarInt());
         }
 
         private void write(FriendlyByteBuf b) {
@@ -125,11 +125,12 @@ public final class ClaimsNet {
             b.writeVarInt(trusted);
             b.writeVarInt(releaseSeconds);
             b.writeBoolean(bypass);
+            b.writeVarInt(epoch);
         }
 
         public Hello withReleaseIn(long ms) {
             return new Hello(team, name, color, solo, role, members, claimed, claimLimit, forced, forceLimit, releasing, ms,
-                canClaim, canForce, canRights, rightsLocked, rights, trusted, releaseSeconds, bypass);
+                canClaim, canForce, canRights, rightsLocked, rights, trusted, releaseSeconds, bypass, epoch);
         }
 
         @Override
@@ -139,18 +140,19 @@ public final class ClaimsNet {
     }
 
     /** Регион целиком: палитра и байты {@link RegionBytes#encode}. */
-    public record Region(String dimension, int rx, int rz, List<TeamEntry> palette, byte[] data) implements CustomPacketPayload {
+    public record Region(String dimension, int rx, int rz, int epoch, List<TeamEntry> palette, byte[] data) implements CustomPacketPayload {
         public static final Type<Region> TYPE = new Type<>(id("region"));
         public static final StreamCodec<FriendlyByteBuf, Region> CODEC = CustomPacketPayload.codec(Region::write, Region::read);
 
         private static Region read(FriendlyByteBuf b) {
-            return new Region(dim(b), b.readVarInt(), b.readVarInt(), readPalette(b), b.readByteArray(RegionBytes.SIZE + 1));
+            return new Region(dim(b), b.readVarInt(), b.readVarInt(), b.readVarInt(), readPalette(b), b.readByteArray(RegionBytes.SIZE + 1));
         }
 
         private void write(FriendlyByteBuf b) {
             b.writeUtf(dimension, 128);
             b.writeVarInt(rx);
             b.writeVarInt(rz);
+            b.writeVarInt(epoch);
             writePalette(b, palette);
             b.writeByteArray(data);
         }
@@ -162,21 +164,23 @@ public final class ClaimsNet {
     }
 
     /** Изменившиеся чанки: байт чанка ссылается на палитру этого пакета. */
-    public record Diff(String dimension, List<TeamEntry> palette, long[] chunks, byte[] codes) implements CustomPacketPayload {
+    public record Diff(String dimension, int epoch, List<TeamEntry> palette, long[] chunks, byte[] codes) implements CustomPacketPayload {
         public static final Type<Diff> TYPE = new Type<>(id("diff"));
         public static final StreamCodec<FriendlyByteBuf, Diff> CODEC = CustomPacketPayload.codec(Diff::write, Diff::read);
 
         private static Diff read(FriendlyByteBuf b) {
             String d = dim(b);
+            int epoch = b.readVarInt();
             List<TeamEntry> p = readPalette(b);
             long[] c = longs(b, RegionBytes.SIZE * MAX_REGIONS);
             byte[] codes = b.readByteArray(c.length);
             if (codes.length != c.length) throw new DecoderException("байтов не столько, сколько чанков");
-            return new Diff(d, p, c, codes);
+            return new Diff(d, epoch, p, c, codes);
         }
 
         private void write(FriendlyByteBuf b) {
             b.writeUtf(dimension, 128);
+            b.writeVarInt(epoch);
             writePalette(b, palette);
             longs(b, chunks);
             b.writeByteArray(codes);
@@ -188,21 +192,26 @@ public final class ClaimsNet {
         }
     }
 
-    /** Что можно получателю на земле этих команд: биты {@link #BUILD} и дальше. */
-    public record Access(List<UUID> teams, byte[] bits) implements CustomPacketPayload {
+    /**
+     * Что можно получателю на земле этих команд: биты {@link #BUILD} и дальше. {@code epoch} это версия прав сервера, на
+     * которой посчитаны биты: клиент гасит нажатие, только если версия его записи не старше версии из {@link Hello}.
+     */
+    public record Access(int epoch, List<UUID> teams, byte[] bits) implements CustomPacketPayload {
         public static final Type<Access> TYPE = new Type<>(id("access"));
         public static final StreamCodec<FriendlyByteBuf, Access> CODEC = CustomPacketPayload.codec(Access::write, Access::read);
 
         private static Access read(FriendlyByteBuf b) {
+            int epoch = b.readVarInt();
             int n = b.readVarInt();
             if (n < 0 || n > 4096) throw new DecoderException("слишком много команд: " + n);
             List<UUID> t = new ArrayList<>(n);
             for (int i = 0; i < n; i++) t.add(b.readUUID());
             byte[] bits = b.readByteArray(n);
-            return new Access(t, bits);
+            return new Access(epoch, t, bits);
         }
 
         private void write(FriendlyByteBuf b) {
+            b.writeVarInt(epoch);
             b.writeVarInt(teams.size());
             for (UUID u : teams) b.writeUUID(u);
             b.writeByteArray(bits);
@@ -341,7 +350,7 @@ public final class ClaimsNet {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // optional: клиент без мода (или старый) не отваливается, сервер тогда шлёт строку над хотбаром
-        PayloadRegistrar r = event.registrar("1").optional();
+        PayloadRegistrar r = event.registrar("2").optional();
         r.playToClient(Denied.TYPE, Denied.CODEC, (p, c) -> client(() -> Client.denied(p)));
         r.playToClient(Hello.TYPE, Hello.CODEC, (p, c) -> client(() -> Client.hello(p)));
         r.playToClient(Region.TYPE, Region.CODEC, (p, c) -> client(() -> Client.region(p)));

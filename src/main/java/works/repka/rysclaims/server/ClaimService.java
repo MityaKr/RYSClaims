@@ -101,6 +101,12 @@ public final class ClaimService {
 
         /** Данные изменились: пора отметить файл для записи. */
         default void dirty() {}
+
+        /** Что можно игрокам на чьей-то земле могло смениться: версия прав растёт, клиентам рассылка ({@code ClaimSync}). */
+        default void accessChanged() {}
+
+        /** Кто видит землю команды на карте сменилось: подписчикам регионы заново. */
+        default void visibilityChanged(UUID team) {}
     }
 
     private final ClaimData data;
@@ -399,11 +405,60 @@ public final class ClaimService {
 
     /** Переключает режим оператора; возвращает новое состояние. */
     public boolean toggleBypass(UUID player) {
-        if (!bypass.remove(player)) {
-            bypass.add(player);
-            return true;
-        }
-        return false;
+        boolean on = !bypass.remove(player);
+        if (on) bypass.add(player);
+        hooks.accessChanged();
+        return on;
+    }
+
+    // ---- правка прав, переключателей, доверенных (окно и команды, проверка права у вызывающего) ----
+
+    private void accessEdited() {
+        hooks.accessChanged();
+        hooks.dirty();
+    }
+
+    public void applyPreset(UUID team, Rights.Preset preset) {
+        data.landOrCreate(team).rights.apply(preset);
+        accessEdited();
+    }
+
+    /** Клетка окна «Права» по столбцу 0.1 (команда, союзники, все), с монотонностью. */
+    public void toggleRight(UUID team, Rights.Action a, Rights.Column c, boolean on) {
+        data.landOrCreate(team).rights.toggle(a, c, on);
+        accessEdited();
+    }
+
+    /** Отметка по столбцу таблицы ({@code Rights.COLUMNS} или {@code team}), без монотонности. */
+    public void setRight(UUID team, Rights.Action a, String column, boolean on) {
+        data.landOrCreate(team).rights.set(a, column, on);
+        accessEdited();
+    }
+
+    public void setRights(UUID team, Rights rights) {
+        data.landOrCreate(team).rights.copyFrom(rights);
+        accessEdited();
+    }
+
+    public void setFlag(UUID team, TeamLand.Flag f, boolean on) {
+        data.landOrCreate(team).flag(f, on);
+        accessEdited();
+    }
+
+    public void setVisibility(UUID team, TeamLand.Visibility v) {
+        TeamLand land = data.landOrCreate(team);
+        if (land.visibility == v) return;
+        land.visibility = v;
+        hooks.visibilityChanged(team);
+        hooks.dirty();
+    }
+
+    /** Доверенный игрок: права столбца «Союзники». Возвращает, изменился ли список. */
+    public boolean trust(UUID team, UUID player, boolean on) {
+        TeamLand land = data.landOrCreate(team);
+        boolean changed = on ? land.trusted.add(player) : land.trusted.remove(player);
+        if (changed) accessEdited();
+        return changed;
     }
 
     /** Кем игрок приходится хозяину земли. */

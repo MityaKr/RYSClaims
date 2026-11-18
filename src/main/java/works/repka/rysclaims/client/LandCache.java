@@ -32,8 +32,11 @@ import works.repka.rysclaims.net.RegionBytes;
  * Только главный поток клиента.
  */
 public final class LandCache {
-    /** Команда, как её знает клиент: имя, цвет, что можно игроку на её земле (биты {@code ClaimsNet.BUILD} и дальше). */
-    public record TeamInfo(UUID id, String name, int color, int access) {
+    /**
+     * Команда, как её знает клиент: имя, цвет, что можно игроку на её земле (биты {@code ClaimsNet.BUILD} и дальше) и версия
+     * прав сервера, на которой посчитаны биты.
+     */
+    public record TeamInfo(UUID id, String name, int color, int access, int epoch) {
         public boolean can(int bit) {
             return (access & bit) != 0;
         }
@@ -72,6 +75,9 @@ public final class LandCache {
     private static long helloAt;
     private static ClaimsNet.@Nullable EditResult result;
     private static long resultAt;
+    /** Своя правка прав ушла на сервер: до {@code Hello} с версией новее {@link #editEpoch} права своей земли под сомнением. */
+    private static int editEpoch = -1;
+    private static long editAt;
 
     private LandCache() {}
 
@@ -80,6 +86,7 @@ public final class LandCache {
     public static void hello(ClaimsNet.Hello h) {
         hello = h;
         helloAt = System.currentTimeMillis();
+        if (editEpoch >= 0 && h.epoch() > editEpoch) editEpoch = -1;
     }
 
     public static void region(ClaimsNet.Region r) {
@@ -92,7 +99,7 @@ public final class LandCache {
             return;
         }
         for (ClaimsNet.TeamEntry e : r.palette()) {
-            learn(e);
+            learn(e, r.epoch());
             if (reg.size < reg.palette.length) reg.palette[reg.size++] = e.id();
         }
         reg.revision = ++counter;
@@ -101,7 +108,7 @@ public final class LandCache {
 
     public static void diff(ClaimsNet.Diff d) {
         if (!d.dimension().equals(dimension)) return;
-        for (ClaimsNet.TeamEntry e : d.palette()) learn(e);
+        for (ClaimsNet.TeamEntry e : d.palette()) learn(e, d.epoch());
         for (int i = 0; i < d.chunks().length; i++) {
             long chunk = d.chunks()[i];
             Region reg = REGIONS.get(RegionBytes.regionOf(chunk));
@@ -118,7 +125,7 @@ public final class LandCache {
     public static void access(ClaimsNet.Access a) {
         for (int i = 0; i < a.teams().size() && i < a.bits().length; i++) {
             TeamInfo old = TEAMS.get(a.teams().get(i));
-            if (old != null) TEAMS.put(old.id(), new TeamInfo(old.id(), old.name(), old.color(), a.bits()[i]));
+            if (old != null) TEAMS.put(old.id(), new TeamInfo(old.id(), old.name(), old.color(), a.bits()[i], Math.max(old.epoch(), a.epoch())));
         }
         counter++;
     }
@@ -134,8 +141,33 @@ public final class LandCache {
         }
     }
 
-    private static void learn(ClaimsNet.TeamEntry e) {
-        TEAMS.put(e.id(), new TeamInfo(e.id(), e.name(), e.color(), e.access()));
+    private static void learn(ClaimsNet.TeamEntry e, int epoch) {
+        TeamInfo old = TEAMS.get(e.id());
+        // запись из более старого пакета не затирает свежие права (пакеты идут по порядку, но на всякий случай)
+        if (old != null && old.epoch() > epoch) TEAMS.put(e.id(), new TeamInfo(e.id(), e.name(), e.color(), old.access(), old.epoch()));
+        else TEAMS.put(e.id(), new TeamInfo(e.id(), e.name(), e.color(), e.access(), epoch));
+    }
+
+    /**
+     * Можно ли верить битам команды и гасить нажатие на клиенте (план 9.2, «Гашение нажатия»): версия записи не старше
+     * версии последнего {@code Hello}, режим оператора выключен, своя правка прав не висит без ответа. При сомнении нажатие
+     * уходит на сервер, а замок показывается по его ответу {@code Denied}.
+     */
+    public static boolean fresh(TeamInfo info) {
+        ClaimsNet.Hello h = hello;
+        if (h == null || h.bypass() || info.epoch() < h.epoch()) return false;
+        if (editEpoch >= 0 && info.id().equals(h.team())) {
+            if (System.currentTimeMillis() - editAt < 5000) return false;
+            editEpoch = -1;
+        }
+        return true;
+    }
+
+    /** Окно отправило правку прав, доверенных или переключателей своей земли. */
+    public static void editedAccess() {
+        ClaimsNet.Hello h = hello;
+        editEpoch = h == null ? 0 : h.epoch();
+        editAt = System.currentTimeMillis();
     }
 
     // ---- вопросы ----
@@ -302,6 +334,7 @@ public final class LandCache {
         wantDim = "";
         hello = null;
         result = null;
+        editEpoch = -1;
         counter++;
         lastSubscribe = 0;
     }

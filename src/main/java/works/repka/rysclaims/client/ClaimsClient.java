@@ -44,6 +44,7 @@ public final class ClaimsClient {
             .tile(0xFFD9714F).icon(Icons.Shape.SHIELD).key(OPEN).order(21).action(LandScreen::open).register()));
         LandLayer.register();
         var bus = NeoForge.EVENT_BUS;
+        bus.addListener(InputGate::onInput);
         bus.addListener((ClientPlayerNetworkEvent.LoggingOut e) -> {
             DenyFeedback.reset();
             LandCache.reset();

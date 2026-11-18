@@ -55,7 +55,26 @@ class ClaimServiceTest {
             public void released(UUID team, String dimension, LongList chunks) {
                 events.add("released " + chunks.size());
             }
+
+            @Override
+            public void accessChanged() {
+                events.add("access");
+            }
         });
+    }
+
+    /** З6: каждая правка, от которой зависит доступ, поднимает версию прав (рассылка клиентам). */
+    @Test
+    void accessEditsRaiseVersion() {
+        service.trust(TEAM, STRANGER, true);
+        assertEquals(Rights.Relation.ALLY, service.relation(STRANGER, TEAM));
+        assertFalse(service.trust(TEAM, STRANGER, true), "повтор ничего не меняет");
+        service.setFlag(TEAM, TeamLand.Flag.PVP, false);
+        service.applyPreset(TEAM, Rights.Preset.OPEN);
+        service.toggleRight(TEAM, Rights.Action.BUILD, Rights.Column.ALL, false);
+        service.toggleBypass(STRANGER);
+        assertEquals(List.of("access", "access", "access", "access", "access"), events);
+        assertTrue(service.allows(STRANGER, OTHER, Rights.Action.BUILD), "оператор");
     }
 
     static LongList one(int x, int z) {

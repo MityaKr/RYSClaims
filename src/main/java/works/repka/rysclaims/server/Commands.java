@@ -439,8 +439,7 @@ public final class Commands {
     private static int setPreset(CommandContext<CommandSourceStack> c, Rights.Preset p) throws CommandSyntaxException {
         ClaimService s = service();
         UUID team = rightsTeam(c, s);
-        s.data().landOrCreate(team).rights.apply(p);
-        ClaimsServer.markDirty();
+        s.applyPreset(team, p);
         c.getSource().sendSuccess(() -> Msg.t("rights.preset_set", "Rights set: %s", presetName(p)), false);
         return 1;
     }
@@ -448,16 +447,14 @@ public final class Commands {
     private static int setRight(CommandContext<CommandSourceStack> c, Rights.Action a, String column, boolean on) throws CommandSyntaxException {
         ClaimService s = service();
         UUID team = rightsTeam(c, s);
-        s.data().landOrCreate(team).rights.set(a, column, on);
-        ClaimsServer.markDirty();
+        s.setRight(team, a, column, on);
         return showRights(c);
     }
 
     private static int setFlag(CommandContext<CommandSourceStack> c, TeamLand.Flag f, boolean on) throws CommandSyntaxException {
         ClaimService s = service();
         UUID team = rightsTeam(c, s);
-        s.data().landOrCreate(team).flag(f, on);
-        ClaimsServer.markDirty();
+        s.setFlag(team, f, on);
         c.getSource().sendSuccess(() -> Msg.t("flag.set", "%s: %s", f.key, Msg.yesNo(on)), false);
         return 1;
     }
@@ -465,8 +462,7 @@ public final class Commands {
     private static int setVisibility(CommandContext<CommandSourceStack> c, TeamLand.Visibility v) throws CommandSyntaxException {
         ClaimService s = service();
         UUID team = rightsTeam(c, s);
-        s.data().landOrCreate(team).visibility = v;
-        ClaimsServer.markDirty();
+        s.setVisibility(team, v);
         c.getSource().sendSuccess(() -> Msg.t("flag.set", "%s: %s", "visibility", v.key()), false);
         return 1;
     }
@@ -475,10 +471,8 @@ public final class Commands {
         ClaimService s = service();
         UUID team = rightsTeam(c, s);
         Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(c, "player");
-        TeamLand land = s.data().landOrCreate(team);
         int n = 0;
-        for (GameProfile p : profiles) if (on ? land.trusted.add(p.getId()) : land.trusted.remove(p.getId())) n++;
-        ClaimsServer.markDirty();
+        for (GameProfile p : profiles) if (s.trust(team, p.getId(), on)) n++;
         String names = String.join(", ", profiles.stream().map(GameProfile::getName).toList());
         c.getSource().sendSuccess(() -> on ? Msg.t("trust.on", "Trusted: %s", names) : Msg.t("trust.off", "No longer trusted: %s", names), false);
         return n;

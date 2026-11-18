@@ -162,5 +162,16 @@ public final class ClaimsServer {
         public void dirty() {
             markDirty();
         }
+
+        @Override
+        public void accessChanged() {
+            ClaimSync.accessChanged();
+        }
+
+        @Override
+        public void visibilityChanged(UUID team) {
+            ClaimSync.accessChanged();
+            ClaimSync.resendAll();
+        }
     }
 }
