@@ -250,7 +250,8 @@ public final class Protection {
         };
     }
 
-    private static boolean check(@Nullable Player player, Level level, BlockPos pos, Rights.Action action) {
+    /** То же, что {@link #allowed}, но отказ уходит в журнал и игроку (для перехватов {@code mixin/}). */
+    public static boolean check(@Nullable Player player, Level level, BlockPos pos, Rights.Action action) {
         if (allowed(player, level, pos, action)) return true;
         deny(player, level, pos, action);
         return false;

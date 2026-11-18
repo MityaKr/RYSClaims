@@ -24,7 +24,7 @@ abstract class ProjectileMixin {
     private void rysclaims$owner(Level level, BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
         Entity owner = ((Projectile) (Object) this).getOwner();
         if (owner instanceof Player p) {
-            if (!Protection.allowed(p, level, pos, Rights.Action.BUILD)) cir.setReturnValue(false);
+            if (!Protection.check(p, level, pos, Rights.Action.BUILD)) cir.setReturnValue(false);
         } else if (owner instanceof Enemy && !Protection.mobMayGrief(owner, level, pos)) {
             cir.setReturnValue(false);
         }

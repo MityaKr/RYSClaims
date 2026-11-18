@@ -2,24 +2,26 @@
 
 Собрана `_shared/tools/make-map.py` 2026-11-18. Руками не править: после структурных правок пересобрать.
 
-Java: 49 файлов, 6805 строк. Переводы: `src/main/resources/assets/rysclaims/lang/en_us.json`, `src/main/resources/assets/rysclaims/lang/ru_ru.json`.
+Java: 65 файлов, 7672 строк. Переводы: `src/main/resources/assets/rysclaims/lang/en_us.json`, `src/main/resources/assets/rysclaims/lang/ru_ru.json`.
 Читать сначала: `CLAUDE.md`, `README.md`.
 
 ## Точки входа
 - `@Mod`: `works.repka.rysclaims.RYSClaims` (`src/main/java`)
+- миксины: `src/main/resources/rysclaims.compat.mixins.json`
 - миксины: `src/main/resources/rysclaims.mixins.json`
 
 ## Папки
 - `docs/` — 1 файлов
 - `gradle/` — 2 файлов
 - `logs/` — 2 файлов
-- `src/` — 70 файлов
+- `src/` — 87 файлов
 
 ## `src/gametest/java` — пакет `works.repka.rysclaims.dev`
 
-**(корень)** (4)
+**(корень)** (5)
 - `BordersGameTests` 233 — З2, часть 2, на тестовом сервере: вода и огонь через границу, снаряд игрока по блоку, журнал отказов, перехваты эндермена и молнии загружаются.
 - `ClaimsGameTests` 100 — Проверки на тестовом сервере без окна (gradlew runGameTestServer): команды /claims доходят до сервиса, билет прогрузки ставится и снимается, «пока кто-то в сети» снимает билет посл…
+- `MachinesGameTests` 195 — Машины мимо событий (R0, разделы 0 и 2) на тестовом сервере: ServerLevel.mayInteract и BlockItem.placeBlock для фейковых игроков, правило места для блок-сущностей, ломатель Cyclic …
 - `MigrateGameTests` 117 — Шаг переезда claims на тестовом сервере (этап З3): заготовки FTB кладутся в мир теста, шаг идёт как /rys migrate run claims; после него билеты стоят на всех перенесённых прогруженн…
 - `ProtectionGameTests` 159 — Защита на тестовом сервере (этап З2, часть 1): каждый случай в двух видах, на чужой земле не прошло, со своим правом прошло.
 
@@ -55,17 +57,33 @@ Java: 49 файлов, 6805 строк. Переводы: `src/main/resources/as
 - `FtbSettings` 87 — Настройки сервера FTB Chunks (ftbchunks-world.snbt) в наши (план, раздел 10.5).
 - `FtbWorld` 222 — Файлы FTB Teams и FTB Chunks мира, прочитанные без игры через Snbt ядра.
 
-**mixin** (5)
+**mixin** (7)
+- `BlockItemMixin` 29 · миксин — Установка блока фейковым игроком мимо ItemStack.useOn (R0, пункт 0.4): плоскость формирования AE2 зовёт Item.useOn напрямую, Integrated Tunnels BlockItem.placeBlock; EntityPlaceEve…
 - `EndermanTakeBlockGoalMixin` 29 · миксин — Эндермен берёт блок (R0, раздел 2): EntityMobGriefingEvent позиции не знает, поэтому настоящая клетка проверяется здесь.
 - `FireBlockMixin` 39 · миксин — Огонь через границу земли (план, раздел 11, строка 20): FireBlock событий не зовёт.
 - `FlowingFluidMixin` 25 · миксин — Вода и лава через границу земли (план, раздел 11, строка 19): событий у растекания нет.
 - `LightningBoltMixin` 24 · миксин — Огонь от молнии (план, раздел 11, строка 20): из точки удара как огонь, у «Громовержца» ещё право его игрока.
 - `ProjectileMixin` 33 · миксин — Снаряд по блоку (план, раздел 11, строка 10): горящая стрела и ТНТ, костёр, хорус, горшок, сталактит, линза бура Botania спрашивают Projectile.mayInteract.
+- `ServerLevelMixin` 29 · миксин — ServerLevel.mayInteract для фейковых игроков (R0, пункт 0.4): плоскость разрушения AE2, Building Gadgets 2, насос Sophisticated спрашивают её и ломают мимо BreakEvent.
+
+**mixin.compat** (12)
+- `Ae2SpatialMixin` 48 · миксин — Пространственный ввод-вывод AE2 19.2.19 (R0, раздел 2): SpatialStorageCellItem.doSpatialTransition(ячейка, уровень, min, max, игрок) пишет блоки прямо в секции чанков.
+- `CompatPlugin` 64 — Перехваты чужих модов включаются, только если мод загружен: имя класса перехвата начинается с ключа из MODS.
+- `CyclicMachinesMixin` 42 · миксин — Cyclic 1.14.2 (R0, раздел 1.2): ломатель, установщик, установщик и сборщик жидкости, торфяная ферма ломают и ставят destroyBlock/setBlockAndUpdate без игрока и событий.
+- `DraconicReactorMixin` 35 · миксин — Взрыв реактора Draconic Evolution 3.1.4 (R0, раздел 2): ExplosionHelper.removeBlock пишет воздух прямо в секции чанков, радиус до сотен блоков.
+- `EnderioFarmMixin` 46 · миксин — Ферма EnderIO 8.2.12 (R0, раздел 1.3): задачи сбора убирают урожай setBlockAndUpdate(AIR) без событий, дроп собирается до этого.
+- `IeExcavatorMixin` 47 · миксин — Экскаватор Immersive Engineering 12.4.2 (R0, раздел 1.2): ExcavatorLogic.digBlock(относительная позиция, IMultiblockLevel) ломает onDestroyedByPlayer общим фейковым игроком без Bre…
+- `OccultismHarvestMixin` 51 · миксин — Дух-фермер Occultism: tick(дух) собирает урожай destroyBlock (дроп падает в мир) и пересаживает setBlock без событий.
+- `OccultismSpiritsMixin` 25 · миксин — Дух-лесоруб Occultism 1.224.4 (R0, раздел 1.3): fellTree(дух, корень) валит дерево destroyBlock без событий.
+- `OritechLaserMixin` 24 · миксин — Лазер Oritech: бьёт далеко, ломает через destroyBlock без событий.
+- `OritechMachinesMixin` 30 · миксин — Oritech 1.2.13 (R0, раздел 1.2): разрушитель и установщик (finishBlockWork: работа идёт в столбце под головкой, тот же чанк, что pos) и лазер (finishBlockBreaking) ломают и ставят …
+- `OritechTreefellerMixin` 25 · миксин — Лесоруб Oritech убирает брёвна setBlockAndUpdate без событий: чужое дерево не трогает.
+- `RftoolsBuilderMixin` 59 · миксин — RFTools Builder 7.0.7 (R0, раздел 1.2): постройка, копия, перенос и обмен ставят блоки setBlock без событий, перенос и обмен ещё и убирают блоки в исходной области.
 
 **net** (1)
 - `ClaimsNet` 64 — Сеть RYSClaims (план, раздел 9.2).
 
-**server** (12)
+**server** (13)
 - `Borders` 57 — Через границу земли без игрока (план, раздел 11, строки 19, 20): вода и лава, огонь, молния.
 - `ClaimService` 576 — Вся логика земли без игры: занять, освободить с отсчётом, оставить, прогрузить, права.
 - `ClaimsServer` 160 — Земля на запущенном сервере: файл, сервис, прогрузка, тик.
@@ -73,8 +91,9 @@ Java: 49 файлов, 6805 строк. Переводы: `src/main/resources/as
 - `DenyLog` 213 — Журнал отказов (план, раздел 9.2): world/rysclaims/log/.jsonl, строка на запись, дозапись в конец.
 - `LoadPlan` 82 — Какие чанки должны быть прогружены и чем это отличается от поставленных билетов.
 - `Loader` 125 — Прогрузка своими билетами: контроллер rysclaims:land, билет «сущность» с UUID команды, ticking = true (как у FTB Chunks, поэтому перенесённая прогрузка грузит мир так же).
+- `Machines` 117 — Машины, которые ломают и ставят мимо событий (R0, раздел 2): их перехваты в mixin/compat зовут сюда.
 - `Msg` 21 — Тексты команд: ключ перевода и английский запасной текст (его видит консоль сервера, где переводов нет).
-- `Protection` 543 — Защита событиями NeoForge (план, раздел 11, строки 1–6, 8–20, 29).
+- `Protection` 544 — Защита событиями NeoForge (план, раздел 11, строки 1–6, 8–20, 29).
 - `ServerConfig` 187 — Настройки сервера: world/serverconfig/rysclaims-server.toml.
 - `TeamHooks` 43 — События команд.
 - `Teams` 59 — То, что сервису нужно знать о командах.

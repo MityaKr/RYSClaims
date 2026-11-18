@@ -29,6 +29,17 @@
 | поршень | не двигает блоки через границу | `pistonsAcrossBorders` (false) |
 | взрыв без хозяина, снаряд CBC | `own`: только свой на своей земле с переключателем; `never`; `always`. Снаряд CBC центра не знает: ломает землю команды только при `always` | `ownerlessExplosions` (own) |
 
+## Машины мимо событий
+
+| Путь | Как ловим | Место | Профиль |
+|---|---|---|---|
+| фейковый игрок через `ServerLevel.mayInteract` (AE2 разрушение, Building Gadgets 2, насос Sophisticated) | `ServerLevelMixin` | не верим | UUID и список имён |
+| фейковый игрок через `BlockItem.placeBlock` (AE2 формирование, Integrated Tunnels) | `BlockItemMixin` | не верим | UUID и список имён |
+| Oritech, Cyclic, IE экскаватор, RFTools Builder, ферма EnderIO | `mixin/compat`, в начале метода работы | блок машины, дальность любая (IE 2 чанка) | нет |
+| духи Occultism | `mixin/compat` | сам дух, 2 чанка | хозяин духа |
+| AE2 пространственный ввод-вывод | вся область | нет | хозяин сети |
+| реактор Draconic | каждый убираемый блок | центр взрыва | правило взрыва без хозяина |
+
 ## Лимиты
 
 ```

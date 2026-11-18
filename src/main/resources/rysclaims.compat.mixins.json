@@ -1,0 +1,23 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "works.repka.rysclaims.mixin.compat",
+  "plugin": "works.repka.rysclaims.mixin.compat.CompatPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "Ae2SpatialMixin",
+    "CyclicMachinesMixin",
+    "DraconicReactorMixin",
+    "EnderioFarmMixin",
+    "IeExcavatorMixin",
+    "OccultismHarvestMixin",
+    "OccultismSpiritsMixin",
+    "OritechLaserMixin",
+    "OritechMachinesMixin",
+    "OritechTreefellerMixin",
+    "RftoolsBuilderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

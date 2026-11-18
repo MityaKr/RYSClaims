@@ -4,11 +4,13 @@
   "package": "works.repka.rysclaims.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "BlockItemMixin",
     "EndermanTakeBlockGoalMixin",
     "FireBlockMixin",
     "FlowingFluidMixin",
     "LightningBoltMixin",
-    "ProjectileMixin"
+    "ProjectileMixin",
+    "ServerLevelMixin"
   ],
   "injectors": {
     "defaultRequire": 1
