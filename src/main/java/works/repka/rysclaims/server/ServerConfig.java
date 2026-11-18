@@ -7,7 +7,7 @@ import works.repka.rysclaims.data.Rights;
 import works.repka.rysclaims.data.Settings;
 
 /**
- * Настройки сервера: {@code world/serverconfig/rysclaims-server.toml}. Значения по умолчанию из плана, раздел 11
+ * Настройки сервера: {@code config/rysclaims-server.toml} (NeoForge 21.1 кладёт серверные настройки в общую папку config). Значения по умолчанию из плана, раздел 11
  * («Настройки сервера и значения по умолчанию»). Код читает их одним снимком {@link #snapshot()}: он пересобирается при
  * загрузке и правке файла.
  */

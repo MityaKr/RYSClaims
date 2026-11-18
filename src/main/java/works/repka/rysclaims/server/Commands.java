@@ -51,8 +51,20 @@ public final class Commands {
     private static final SimpleCommandExceptionType NO_TEAM =
         new SimpleCommandExceptionType(Msg.t("error.no_team", "No such team or player"));
 
-    private static final SuggestionProvider<CommandSourceStack> PLAYERS =
-        (c, b) -> SharedSuggestionProvider.suggest(c.getSource().getServer().getPlayerList().getPlayerNamesArray(), b);
+    /** Команды и игроки в сети; имя с пробелами или не латиницей в кавычках. */
+    private static final SuggestionProvider<CommandSourceStack> PLAYERS = (c, b) -> {
+        List<String> out = new ArrayList<>();
+        if (ClaimsServer.running()) for (String n : teamNames(ClaimsServer.service()).values()) out.add(quoted(n));
+        for (String n : c.getSource().getServer().getPlayerList().getPlayerNamesArray()) out.add(n);
+        return SharedSuggestionProvider.suggest(out, b);
+    };
+
+    private static String quoted(String name) {
+        for (int i = 0; i < name.length(); i++) {
+            if (!com.mojang.brigadier.StringReader.isAllowedInUnquotedString(name.charAt(i))) return "\"" + name.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        }
+        return name;
+    }
 
     private Commands() {}
 
@@ -130,7 +142,7 @@ public final class Commands {
     private static LiteralArgumentBuilder<CommandSourceStack> admin() {
         var node = lit("admin").requires(s -> s.hasPermission(2));
         node.then(lit("bypass").executes(Commands::bypass));
-        var team = net.minecraft.commands.Commands.argument("team", StringArgumentType.word()).suggests(PLAYERS);
+        var team = net.minecraft.commands.Commands.argument("team", StringArgumentType.string()).suggests(PLAYERS);
         team.then(radius("claim", (c, r) -> edit(c, team(c), Op.CLAIM, r, true)));
         team.then(radius("release", (c, r) -> edit(c, team(c), Op.RELEASE, r, true)));
         team.then(radius("load", (c, r) -> edit(c, team(c), Op.LOAD, r, true)));
@@ -141,7 +153,7 @@ public final class Commands {
             .then(net.minecraft.commands.Commands.argument("page", IntegerArgumentType.integer(1, 100))
                 .executes(c -> log(c, team(c), IntegerArgumentType.getInteger(c, "page")))));
         node.then(lit("for").then(team));
-        node.then(lit("limit").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.word()).suggests(PLAYERS)
+        node.then(lit("limit").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.string()).suggests(PLAYERS)
             .then(lit("claims").then(net.minecraft.commands.Commands.argument("n", IntegerArgumentType.integer(-1_000_000, 1_000_000))
                 .executes(c -> teamBonus(c, true))))
             .then(lit("force").then(net.minecraft.commands.Commands.argument("n", IntegerArgumentType.integer(-1_000_000, 1_000_000))
@@ -169,29 +181,31 @@ public final class Commands {
         return service().teams().teamOf(c.getSource().getPlayerOrException().getUUID());
     }
 
-    /** Команда по UUID, по нику игрока (его команда) или по имени команды FTB без пары. */
+    /** Команда по UUID, по точному имени команды, по нику игрока (его команда), по имени команды без учёта регистра ({@link TeamLookup}). */
     private static UUID team(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         String arg = StringArgumentType.getString(c, "team");
         ClaimService s = service();
-        try {
-            return UUID.fromString(arg);
-        } catch (IllegalArgumentException ignored) {
-            // не UUID
-        }
         MinecraftServer server = c.getSource().getServer();
-        ServerPlayer online = server.getPlayerList().getPlayerByName(arg);
-        if (online != null) return s.teams().teamOf(online.getUUID());
-        var cache = server.getProfileCache();
-        if (cache != null) {
-            var profile = cache.get(arg);
-            if (profile.isPresent()) return s.teams().teamOf(profile.get().getId());
-        }
-        for (UUID t : TeamsApi.get().teams()) if (TeamsApi.get().name(t).getString().equalsIgnoreCase(arg)) return t;
-        for (TeamLand land : s.data().lands().values()) if (arg.equalsIgnoreCase(land.legacyName)) return land.id;
-        throw NO_TEAM.create();
+        UUID found = TeamLookup.resolve(arg, teamNames(s), name -> {
+            ServerPlayer online = server.getPlayerList().getPlayerByName(name);
+            if (online != null) return s.teams().teamOf(online.getUUID());
+            var cache = server.getProfileCache();
+            if (cache == null) return null;
+            return cache.get(name).map(p -> s.teams().teamOf(p.getId())).orElse(null);
+        });
+        if (found == null) throw NO_TEAM.create();
+        return found;
     }
 
-    static Component teamName(ClaimService s, UUID team) {
+    /** Имена команд RYSTeams и команд FTB без пары. */
+    private static Map<UUID, String> teamNames(ClaimService s) {
+        Map<UUID, String> names = new LinkedHashMap<>();
+        for (UUID t : TeamsApi.get().teams()) names.put(t, TeamsApi.get().name(t).getString());
+        for (TeamLand land : s.data().lands().values()) if (land.legacyName != null) names.putIfAbsent(land.id, land.legacyName);
+        return names;
+    }
+
+    public static Component teamName(ClaimService s, UUID team) {
         TeamLand land = s.data().land(team);
         if (land != null && land.legacyName != null) return Msg.t("team.legacy", "FTB team \"%s\"", land.legacyName);
         return TeamsApi.get().name(team);
