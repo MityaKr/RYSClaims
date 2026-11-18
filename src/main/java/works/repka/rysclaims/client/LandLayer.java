@@ -125,17 +125,36 @@ public final class LandLayer implements MapApi.Layer, MapApi.Areas {
             return out;
         }
         boolean own = h != null && st.team().id().equals(h.team());
-        out.add(own ? Component.translatable(h.solo() ? "rysclaims.tip.own.solo" : "rysclaims.tip.own", shownName(st))
-            : Component.translatable("rysclaims.tip.other", shownName(st)));
+        if (!own) {
+            // чужая земля (разбор скептика 18.11): чья и одной строкой, что можно тебе
+            out.add(Component.translatable("rysclaims.tip.other", shownName(st)));
+            if (st.releasing()) out.add(Component.translatable("rysclaims.tip.releasing"));
+            out.add(rightsLine(st.team()));
+            return out;
+        }
+        out.add(Component.translatable(h.solo() ? "rysclaims.tip.own.solo" : "rysclaims.tip.own", shownName(st)));
         out.add(Component.translatable("rysclaims.tip.chunk", cx, cz));
         out.add(Component.translatable(st.force() ? "rysclaims.tip.force.on" : "rysclaims.tip.force.off"));
         if (st.releasing()) out.add(Component.translatable("rysclaims.tip.releasing"));
-        String[] keys = {"build", "open", "use", "entity"};
-        int[] bits = {ClaimsNet.BUILD, ClaimsNet.OPEN, ClaimsNet.USE, ClaimsNet.ENTITY};
-        for (int i = 0; i < keys.length; i++) {
-            out.add(Component.translatable("rysclaims.tip." + keys[i], Component.translatable(st.team().can(bits[i]) ? "rysclaims.tip.yes" : "rysclaims.tip.no")));
+        // на своей земле строка прав только если роли что-то нельзя
+        if (!st.team().can(ClaimsNet.BUILD) || !st.team().can(ClaimsNet.OPEN) || !st.team().can(ClaimsNet.USE) || !st.team().can(ClaimsNet.ENTITY)) {
+            out.add(rightsLine(st.team()));
         }
         return out;
+    }
+
+    private static final String[] RIGHT_KEYS = {"build", "open", "use", "entity"};
+    private static final int[] RIGHT_BITS = {ClaimsNet.BUILD, ClaimsNet.OPEN, ClaimsNet.USE, ClaimsNet.ENTITY};
+
+    /** Что можно тебе на земле команды одной строкой: «Тебе здесь: только смотреть» или «Тебе здесь можно: открывать, двери». */
+    static Component rightsLine(LandCache.TeamInfo team) {
+        List<String> can = new ArrayList<>();
+        for (int i = 0; i < RIGHT_KEYS.length; i++) {
+            if (team.can(RIGHT_BITS[i])) can.add(Component.translatable("rysclaims.tip.can." + RIGHT_KEYS[i]).getString());
+        }
+        if (can.isEmpty()) return Component.translatable("rysclaims.tip.look");
+        if (can.size() == RIGHT_KEYS.length) return Component.translatable("rysclaims.tip.all");
+        return Component.translatable("rysclaims.tip.can", String.join(", ", can));
     }
 
     // ---- строки под миникартой ----
