@@ -2,7 +2,7 @@
 
 Собрана `_shared/tools/make-map.py` 2026-11-18. Руками не править: после структурных правок пересобрать.
 
-Java: 34 файлов, 4956 строк. Переводы: `src/main/resources/assets/rysclaims/lang/en_us.json`, `src/main/resources/assets/rysclaims/lang/ru_ru.json`.
+Java: 36 файлов, 5529 строк. Переводы: `src/main/resources/assets/rysclaims/lang/en_us.json`, `src/main/resources/assets/rysclaims/lang/ru_ru.json`.
 Читать сначала: `CLAUDE.md`, `README.md`.
 
 ## Точки входа
@@ -12,18 +12,19 @@ Java: 34 файлов, 4956 строк. Переводы: `src/main/resources/as
 - `docs/` — 1 файлов
 - `gradle/` — 2 файлов
 - `logs/` — 2 файлов
-- `src/` — 51 файлов
+- `src/` — 56 файлов
 
 ## `src/gametest/java` — пакет `works.repka.rysclaims.dev`
 
-**(корень)** (2)
+**(корень)** (3)
 - `ClaimsGameTests` 100 — Проверки на тестовом сервере без окна (gradlew runGameTestServer): команды /claims доходят до сервиса, билет прогрузки ставится и снимается, «пока кто-то в сети» снимает билет посл…
 - `MigrateGameTests` 117 — Шаг переезда claims на тестовом сервере (этап З3): заготовки FTB кладутся в мир теста, шаг идёт как /rys migrate run claims; после него билеты стоят на всех перенесённых прогруженн…
+- `ProtectionGameTests` 157 — Защита на тестовом сервере (этап З2, часть 1): каждый случай в двух видах, на чужой земле не прошло, со своим правом прошло.
 
 ## `src/main/java` — пакет `works.repka.rysclaims`
 
 **(корень)** (1)
-- `RYSClaims` 70 — Точка входа: общая для клиента и сервера.
+- `RYSClaims` 75 — Точка входа: общая для клиента и сервера.
 
 **api** (1)
 - `ClaimsApiImpl` 77 — Реализация контракта ядра.
@@ -46,13 +47,14 @@ Java: 34 файлов, 4956 строк. Переводы: `src/main/resources/as
 - `FtbSettings` 80 — Настройки сервера FTB Chunks (ftbchunks-world.snbt) в наши (план, раздел 10.5).
 - `FtbWorld` 222 — Файлы FTB Teams и FTB Chunks мира, прочитанные без игры через Snbt ядра.
 
-**server** (9)
+**server** (10)
 - `ClaimService` 502 — Вся логика земли без игры: занять, освободить с отсчётом, оставить, прогрузить, права.
 - `ClaimsServer` 122 — Земля на запущенном сервере: файл, сервис, прогрузка, тик.
 - `Commands` 538 — Команды /claims первого выпуска (план, раздел 6).
 - `LoadPlan` 82 — Какие чанки должны быть прогружены и чем это отличается от поставленных билетов.
 - `Loader` 125 — Прогрузка своими билетами: контроллер rysclaims:land, билет «сущность» с UUID команды, ticking = true (как у FTB Chunks, поэтому перенесённая прогрузка грузит мир так же).
 - `Msg` 21 — Тексты команд: ключ перевода и английский запасной текст (его видит консоль сервера, где переводов нет).
+- `Protection` 411 — Защита событиями NeoForge (план, раздел 11, строки 1–6, 8–18, 29).
 - `ServerConfig` 166 — Настройки сервера: world/serverconfig/rysclaims-server.toml.
 - `TeamHooks` 43 — События команд.
 - `Teams` 59 — То, что сервису нужно знать о командах.

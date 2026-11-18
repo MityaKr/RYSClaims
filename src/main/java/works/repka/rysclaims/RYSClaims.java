@@ -27,6 +27,7 @@ import works.repka.rysclaims.server.ClaimService;
 import works.repka.rysclaims.server.ClaimsServer;
 import works.repka.rysclaims.server.Commands;
 import works.repka.rysclaims.server.Loader;
+import works.repka.rysclaims.server.Protection;
 import works.repka.rysclaims.server.ServerConfig;
 import works.repka.rysclaims.server.TeamHooks;
 
@@ -56,7 +57,11 @@ public final class RYSClaims {
 
         // земля поднимается раньше переезда ядра (ServerStartedEvent) и раньше остальных модов
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGH, (ServerStartingEvent e) -> ClaimsServer.start(e.getServer()));
-        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> ClaimsServer.stop());
+        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> {
+            ClaimsServer.stop();
+            Protection.clear();
+        });
+        Protection.register(NeoForge.EVENT_BUS);
         NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post e) -> ClaimsServer.tick());
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent e) -> {
             if (e.getEntity() instanceof ServerPlayer p && !(p instanceof FakePlayer)) ClaimsServer.login(p);

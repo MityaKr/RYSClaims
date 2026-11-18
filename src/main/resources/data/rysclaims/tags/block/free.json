@@ -1,0 +1,12 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:crafting_table",
+    "minecraft:bell",
+    "minecraft:ender_chest",
+    {
+      "id": "#waystones:waystones",
+      "required": false
+    }
+  ]
+}

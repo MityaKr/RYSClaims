@@ -1,0 +1,24 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:flint_and_steel",
+    "minecraft:fire_charge",
+    "#minecraft:boats",
+    "minecraft:minecart",
+    "minecraft:chest_minecart",
+    "minecraft:furnace_minecart",
+    "minecraft:hopper_minecart",
+    "minecraft:tnt_minecart",
+    "minecraft:end_crystal",
+    "minecraft:bone_meal",
+    "minecraft:armor_stand",
+    "minecraft:item_frame",
+    "minecraft:glow_item_frame",
+    "minecraft:painting",
+    "minecraft:lead",
+    {
+      "id": "#c:spawn_eggs",
+      "required": false
+    }
+  ]
+}

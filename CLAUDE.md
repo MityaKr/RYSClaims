@@ -17,6 +17,7 @@
 * `server/ClaimService`: вся логика без игры (занять, освободить с отсчётом, оставить, прогрузить, права, машины, события команд). Измерение в нём строка id, время из `clock`. Клиенту не верим.
 * `server/Loader` + `LoadPlan`: билеты `TicketController` `rysclaims:land` (сущность = UUID команды, ticking). Проверка при загрузке мира снимает лишние, `sync` раз в 10 секунд и по событиям сверяет поставленное с нужным.
 * `server/ClaimsServer`: жизнь на сервере (ServerStarting, высокий приоритет, раньше переезда ядра в ServerStarted), тик, вход.
+* `server/Protection`: защита событиями NeoForge, первым делом дешёвый выход (в измерении нет земли). Фейковый игрок судится `machineNames`, профилем и «Машины снаружи», его позиции не верим (R0, пункт 0.1). Порча блоков мобами судится только у монстров (`Enemy`): иначе на базе встали бы овцы, жители и големы.
 * `server/Commands`: `/claims`; `server/ServerConfig`: `world/serverconfig/rysclaims-server.toml`.
 * `api/ClaimsApiImpl`: контракт ядра `claims.ClaimsApi`.
 * `migrate/FtbWorld`, `FtbSettings`: чтение файлов FTB через `migrate.Snbt` ядра (своего читателя нет). `FtbClaims` считает перенос без игры, `ClaimsStep` это шаг `claims` ядра (порядок 30): кладёт базу одним сохранением, потом билеты; откат отказывает, если после переезда землю правили (счётчик `edits`).
