@@ -55,7 +55,6 @@ public final class MachinesGameTests {
 
     private static void claim(ServerLevel level, UUID team, BlockPos... positions) {
         LongArrayList list = new LongArrayList();
-        BordersGameTests.force(level, true, positions);
         for (BlockPos p : positions) list.add(chunk(p));
         ClaimsServer.service().claim(null, team, Loader.id(level.dimension()), list, true);
     }
@@ -64,7 +63,6 @@ public final class MachinesGameTests {
         ClaimService s = ClaimsServer.service();
         String dim = Loader.id(level.dimension());
         for (BlockPos p : positions) if (s.data().get(dim, chunk(p)) != null) s.data().remove(dim, chunk(p));
-        BordersGameTests.force(level, false, positions);
     }
 
     /** Плоскость разрушения AE2 и подобные спрашивают mayInteract: чужой профиль нельзя, профиль хозяина можно, живой игрок как раньше. */
@@ -89,7 +87,7 @@ public final class MachinesGameTests {
             level.getServer().getPlayerList().remove(stranger);
             free(level, pos);
         }
-        h.succeed();
+        done(h);
     }
 
     /** Плоскость формирования AE2 ставит через Item.useOn мимо EntityPlaceEvent: перехват в BlockItem.placeBlock. */
@@ -111,7 +109,7 @@ public final class MachinesGameTests {
         } finally {
             free(level, floor);
         }
-        h.succeed();
+        done(h);
     }
 
     private static void place(ServerLevel level, FakePlayer player, BlockPos floor) {
@@ -145,7 +143,7 @@ public final class MachinesGameTests {
         } finally {
             free(level, machine, ownFar, foreign);
         }
-        h.succeed();
+        done(h);
     }
 
     /** Ломатель Cyclic у границы: чужой камень цел, свободный сломан. Без Cyclic тест проходит пустым. */
@@ -165,7 +163,6 @@ public final class MachinesGameTests {
         BlockPos wild = wildMachine.east();
         UUID team = UUID.randomUUID();
         claim(level, team, foreign);
-        BordersGameTests.force(level, true, wildMachine);
         try {
             boolean foreignKept = run(level, breaker, atBorder, foreign);
             boolean wildBroken = !run(level, breaker, wildMachine, wild);
@@ -173,9 +170,8 @@ public final class MachinesGameTests {
             if (!foreignKept) h.fail("ломатель Cyclic сломал камень на земле другой команды");
         } finally {
             free(level, foreign);
-            BordersGameTests.force(level, false, wildMachine);
         }
-        h.succeed();
+        done(h);
     }
 
     /** Ставит ломатель лицом на восток, питание, камень перед ним; тикает; отвечает, цел ли камень. */
@@ -190,5 +186,13 @@ public final class MachinesGameTests {
         Method tick = be.getClass().getMethod("tick");
         for (int i = 0; i < 5; i++) tick.invoke(be);
         return level.getBlockState(target).is(Blocks.STONE);
+    }
+
+    /**
+     * Успех через несколько тиков: синхронная загрузка чанка ставит временный билет, и если тест кончился в том же тике,
+     * остановка сервера GameTest крутится в выгрузке чанков бесконечно.
+     */
+    static void done(GameTestHelper h) {
+        h.runAfterDelay(3, h::succeed);
     }
 }

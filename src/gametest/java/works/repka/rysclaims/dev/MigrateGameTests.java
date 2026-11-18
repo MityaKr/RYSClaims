@@ -91,7 +91,7 @@ public final class MigrateGameTests {
                 if (c == null || !c.force()) h.fail("лишний билет " + chunk + " в " + level.dimension().location());
             }
         }
-        h.succeed();
+        done(h);
     }
 
     private static LongSet tickets(ServerLevel level) {
@@ -112,5 +112,13 @@ public final class MigrateGameTests {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * Успех через несколько тиков: синхронная загрузка чанка ставит временный билет, и если тест кончился в том же тике,
+     * остановка сервера GameTest крутится в выгрузке чанков бесконечно.
+     */
+    static void done(GameTestHelper h) {
+        h.runAfterDelay(3, h::succeed);
     }
 }

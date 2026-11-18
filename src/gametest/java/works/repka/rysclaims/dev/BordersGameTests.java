@@ -54,7 +54,10 @@ public final class BordersGameTests {
         for (BlockPos p : positions) if (s.data().get(dim, chunk(p)) != null) s.data().remove(dim, chunk(p));
     }
 
-    /** Чанки теста тикают (блоки, жидкости, сущности), только пока на них билет. */
+    /**
+     * Билет на чанки теста. Не пользоваться без нужды: билет в далёкой несгенерированной земле запускает генерацию сотен
+     * чанков вокруг, и остановка сервера GameTest ждёт её минутами. Тесты тикают сами (вызов tick, triggerEvent).
+     */
     static void force(ServerLevel level, boolean on, BlockPos... positions) {
         for (BlockPos p : positions) level.setChunkForced(p.getX() >> 4, p.getZ() >> 4, on);
     }
@@ -95,7 +98,7 @@ public final class BordersGameTests {
         } finally {
             free(level, foreign, ownNext);
         }
-        h.succeed();
+        done(h);
     }
 
     /** Огонь у границы жжёт свою доску и не трогает доску на земле другой команды. */
@@ -130,7 +133,7 @@ public final class BordersGameTests {
             fireTick.set(wasFireTick, level.getServer());
             free(level, foreign);
         }
-        h.succeed();
+        done(h);
     }
 
     /** Стрела игрока по блоку: на чужой земле mayInteract отказывает (ТНТ, костёр, хорус), хозяину можно. */
@@ -152,7 +155,7 @@ public final class BordersGameTests {
             level.getServer().getPlayerList().remove(owner);
             free(level, pos);
         }
-        h.succeed();
+        done(h);
     }
 
     /** Отказ уходит в журнал хозяев с причиной и склеивается при повторе. */
@@ -187,7 +190,7 @@ public final class BordersGameTests {
             level.getServer().getPlayerList().remove(stranger);
             free(level, pos);
         }
-        h.succeed();
+        done(h);
     }
 
     /**
@@ -200,7 +203,6 @@ public final class BordersGameTests {
         BlockPos pos = base(4).offset(8, 1, 8);
         UUID team = UUID.randomUUID();
         claim(level, team, pos);
-        force(level, true, pos);
         level.getServer().setDifficulty(net.minecraft.world.Difficulty.NORMAL, true);
         var fireTick = level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DOFIRETICK);
         fireTick.set(true, level.getServer());
@@ -215,18 +217,26 @@ public final class BordersGameTests {
         }
         bolt.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
         bolt.setCause(stranger);
-        level.addFreshEntity(bolt);
-        h.runAfterDelay(10, () -> {
+        // тикаем молнию сами: чанк теста не тикает, а билет на него запустил бы генерацию вокруг
+        for (int i = 0; i < 4; i++) bolt.tick();
+        h.runAfterDelay(3, () -> {
             boolean fire = false;
             for (BlockPos p : BlockPos.betweenClosed(pos.offset(-1, -1, -1), pos.offset(1, 1, 1))) {
                 if (level.getBlockState(p).is(Blocks.FIRE)) fire = true;
             }
             level.getServer().getPlayerList().remove(stranger);
             free(level, pos);
-            force(level, false, pos);
             fireTick.set(false, level.getServer());
             if (fire) h.fail("молния чужого игрока подожгла землю команды");
             h.succeed();
         });
+    }
+
+    /**
+     * Успех через несколько тиков: синхронная загрузка чанка ставит временный билет, и если тест кончился в том же тике,
+     * остановка сервера GameTest крутится в выгрузке чанков бесконечно.
+     */
+    static void done(GameTestHelper h) {
+        h.runAfterDelay(3, h::succeed);
     }
 }

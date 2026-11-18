@@ -100,8 +100,35 @@ tasks.named('check') {
     dependsOn 'gametestClasses'
 }
 
-// Сервер GameTest выходит с кодом ошибки, если тест не прошёл; итог ещё и в логе.
+// Сервер GameTest выходит с кодом ошибки, если тест не прошёл; итог ещё и в логе. Вердикт берётся из лога.
+// Сторож: остановка сервера GameTest иногда бесконечно крутится в выгрузке чанков (рабочие потоки стоят, игра, а не мод);
+// если через 30 секунд после строки итога процесс жив, сторож его снимает. Снимается только процесс этого запуска
+// (в командной строке папка run-server этого проекта), чужие java не трогаются.
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    ignoreExitValue = true
+    doFirst {
+        def log = file('run-server/logs/latest.log')
+        def started = System.currentTimeMillis()
+        def marker = file('run-server').absolutePath
+        Thread.startDaemon('rysclaims-gametest-watchdog') {
+            Long seen = null
+            while (true) {
+                sleep 2000
+                if (System.currentTimeMillis() - started > 15 * 60 * 1000) return
+                if (!log.exists() || log.lastModified() < started) continue
+                if (seen == null && log.getText('UTF-8').contains('required test')) seen = System.currentTimeMillis()
+                if (seen != null && System.currentTimeMillis() - seen > 30000) {
+                    ProcessHandle.current().descendants().filter { ph ->
+                        ph.info().commandLine().map { it.contains(marker) || it.contains('rysclaims.samples') }.orElse(false)
+                    }.forEach { ph ->
+                        logger.warn("GameTest: server did not stop 30 s after the verdict, killing pid ${ph.pid()}")
+                        ph.destroyForcibly()
+                    }
+                    return
+                }
+            }
+        }
+    }
     doLast {
         def log = file('run-server/logs/latest.log')
         if (log.exists() && !log.readLines('UTF-8').any { it.contains('All 1 required tests passed') || it =~ /All \d+ required tests passed/ }) {

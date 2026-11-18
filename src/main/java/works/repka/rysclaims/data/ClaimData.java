@@ -40,6 +40,8 @@ public final class ClaimData {
     private final Map<UUID, TeamLand> teams = new LinkedHashMap<>();
     private final Map<UUID, PlayerBonus> players = new LinkedHashMap<>();
     private ListTag archive = new ListTag();
+    /** «Дом» летающей постройки Sable: UUID подуровня → команда земли, где её собрали (план, раздел 11, строка 34). */
+    private final Map<UUID, UUID> homes = new LinkedHashMap<>();
     private Rights defaults;
     /** Сколько правок земли было: откат переезда сверяет это число. */
     private long edits;
@@ -79,6 +81,21 @@ public final class ClaimData {
 
     public List<String> dimensions() {
         return List.copyOf(dims.keySet());
+    }
+
+    /** Команда-дом подуровня Sable или null. */
+    public @Nullable UUID home(UUID subLevel) {
+        return homes.get(subLevel);
+    }
+
+    /** Запоминает дом подуровня; null забывает. */
+    public void home(UUID subLevel, @Nullable UUID team) {
+        if (team == null) homes.remove(subLevel);
+        else homes.put(subLevel, team);
+    }
+
+    public Map<UUID, UUID> homes() {
+        return Collections.unmodifiableMap(homes);
     }
 
     public @Nullable TeamLand land(UUID team) {
@@ -215,6 +232,7 @@ public final class ClaimData {
         players.clear();
         players.putAll(other.players);
         archive = other.archive.copy();
+        homes.putAll(other.homes);
     }
 
     /** Пустая база: откат переезда. Счётчик правок не меняется. */
@@ -274,6 +292,16 @@ public final class ClaimData {
         }
         tag.put("players", p);
         tag.put("archive", archive.copy());
+        if (!homes.isEmpty()) {
+            ListTag h = new ListTag();
+            homes.forEach((sub, team) -> {
+                CompoundTag one = new CompoundTag();
+                one.putUUID("sub", sub);
+                one.putUUID("team", team);
+                h.add(one);
+            });
+            tag.put("homes", h);
+        }
         return tag;
     }
 
@@ -312,6 +340,10 @@ public final class ClaimData {
             data.players.put(id, new PlayerBonus(b.getInt("bonusClaims"), b.getInt("bonusForce")));
         }
         data.archive = tag.getList("archive", Tag.TAG_COMPOUND).copy();
+        for (Tag x : tag.getList("homes", Tag.TAG_COMPOUND)) {
+            CompoundTag t = (CompoundTag) x;
+            if (t.hasUUID("sub") && t.hasUUID("team")) data.homes.put(t.getUUID("sub"), t.getUUID("team"));
+        }
         return data;
     }
 

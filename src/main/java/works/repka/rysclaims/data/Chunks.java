@@ -42,6 +42,24 @@ public final class Chunks {
         return new long[] {pack(x + 1, z), pack(x - 1, z), pack(x, z + 1), pack(x, z - 1)};
     }
 
+    /**
+     * Чанк лежит в сетке участков Sable (R0, раздел 3): контейнер {@code (7, 7, 10000, 10000)}, участок 2^7 чанков, сетка
+     * 128 × 128 участков с начала 10000, то есть чанки от 1 280 000 до 1 296 383 по обеим осям. Занять такой чанк нельзя:
+     * там лежат блоки летающих построек, их защиту решает земля под постройкой.
+     */
+    public static boolean sablePlot(int cx, int cz) {
+        return inPlotRange(cx) && inPlotRange(cz);
+    }
+
+    public static boolean sablePlot(long chunk) {
+        return sablePlot(x(chunk), z(chunk));
+    }
+
+    private static boolean inPlotRange(int c) {
+        int plot = (c >> 7) - 10000;
+        return plot >= 0 && plot < 128;
+    }
+
     public static String text(long chunk) {
         return x(chunk) + ", " + z(chunk);
     }

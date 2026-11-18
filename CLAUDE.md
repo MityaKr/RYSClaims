@@ -22,6 +22,7 @@
 * `server/DenyLog`: журнал отказов в памяти и файлах `world/rysclaims/log`, запись раз в минуту в своём потоке. `net/ClaimsNet`: пакет `Denied` (необязательный канал), `client/DenyFeedback` показывает причину.
 * `mixin/`: перехваты игры там, где событий нет (`rysclaims.mixins.json`, `defaultRequire = 1`: сломанный перехват роняет GameTest).
 * `mixin/compat`: перехваты машин чужих модов (`@Pseudo`, строки целей, необязательный набор `rysclaims.compat.mixins.json`, `CompatPlugin` включает класс по префиксу имени, только если мод загружен). Сигнатуры сверены `javap` с jar сервера RepYS. `server/Machines`: решение по месту блок-сущности и журнал.
+* `compat/sable/SableLand`: позиция участка Sable в мировую и дом постройки (компаньон отражением, сначала проверка сетки `Chunks.sablePlot`); `SableAssembly` + `mixin/compat/SableAssemblyMixin`: фильтр блоков сборки и запись дома в `ClaimData.homes`.
 * `server/Commands`: `/claims`; `server/ServerConfig`: `world/serverconfig/rysclaims-server.toml`.
 * `api/ClaimsApiImpl`: контракт ядра `claims.ClaimsApi`.
 * `migrate/FtbWorld`, `FtbSettings`: чтение файлов FTB через `migrate.Snbt` ядра (своего читателя нет). `FtbClaims` считает перенос без игры, `ClaimsStep` это шаг `claims` ядра (порядок 30): кладёт базу одним сохранением, потом билеты; откат отказывает, если после переезда землю правили (счётчик `edits`).
@@ -54,5 +55,6 @@ gradlew runGameTestServer    # тестовый сервер без окна, к
 * Настоящие файлы FTB RepYS берутся из `../../_shared/_saved/fixtures/ftb-2026-11-18` (вне git, свойство `-Pfixtures=`); без папки тест пропускается. В git лежат заготовки того же формата `src/test/resources/ftb`.
 * GameTest живут в `src/gametest` и в jar не попадают. Перед запуском игры проверить свободную память. Перед каждым запуском старый мир `run-server/world` переносить в `_stale` (шаг переезда в нём уже сделан).
 * `gradlew runGameTestServer -PcompatMods=C:/Projects/RepYS-Server/mods` подкладывает Cyclic и flib (только чтение): так проверяется весь путь перехватов `mixin/compat`.
-* Тесты, которым нужны тики (поршень, молния), держат свои чанки билетом `setChunkForced`. Воду в далёких нетикающих чанках не ставить: остановка сервера GameTest зависает в выгрузке чанков.
+* Чанки тестов не тикают: поршень, молнию, огонь, ломатель Cyclic тест тикает сам (`triggerEvent`, `tick`), воду проверяет через `canSpreadTo`. Билет `setChunkForced` в далёкой земле запускает генерацию сотен чанков, не ставить. Тест кончается через `done(h)` (успех через 3 тика): иначе временные билеты синхронной загрузки мешают остановке.
+* Остановка сервера GameTest иногда бесконечно крутится в выгрузке чанков (рабочие потоки стоят): сторож в `build.gradle` снимает процесс этого запуска через 30 секунд после строки итога, вердикт берётся из лога.
 * Сборка требует соседний `../RYSCore` с выполненным `gradlew publish` (ядро 1.11.0).

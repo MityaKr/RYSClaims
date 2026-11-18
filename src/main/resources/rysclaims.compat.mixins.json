@@ -15,7 +15,8 @@
     "OritechLaserMixin",
     "OritechMachinesMixin",
     "OritechTreefellerMixin",
-    "RftoolsBuilderMixin"
+    "RftoolsBuilderMixin",
+    "SableAssemblyMixin"
   ],
   "injectors": {
     "defaultRequire": 0

@@ -11,6 +11,7 @@
 | `ids` | UUID команд по номерам; поле `team` у чанка это номер в этом списке |
 | `teams.<uuid>` | `bonusClaims`, `bonusForce` (добавка команде), `lastSeen`, `loadMode` (`online`/`always`), `loadHours` (0.2), `visibility` (`all`/`allies`/`team`), `rights` (`build`, `open`, `use`, `entity`: списки столбцов), `flags` (`ownExplosions`, `mobGrief`, `pvp`, `machinesInside`, `machinesOutside`, `machinesProfile`), `trusted`, `machineNames`, `legacy {name, source, members, owner}` (команда FTB без пары: её участники остаются своими), `plots` (0.2) |
 | `claims.<измерение>` | список `{pos, team, by?, at, plot, force, releaseAt}`; `pos` как `ChunkPos.asLong`, время в мс от эпохи |
+| `homes` | `[{sub, team}]`: дом летающей постройки Sable, UUID подуровня → команда земли, где её собрали (0.0.6) |
 | `players.<uuid>` | личные добавки `bonusClaims`, `bonusForce`: уходят с игроком |
 | `archive` | распавшиеся команды (0.2), хранится как есть |
 

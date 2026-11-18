@@ -86,7 +86,7 @@ public final class ProtectionGameTests {
             level.getServer().getPlayerList().remove(stranger);
             free(level, pos);
         }
-        h.succeed();
+        done(h);
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
@@ -110,7 +110,7 @@ public final class ProtectionGameTests {
         } finally {
             free(level, claimed);
         }
-        h.succeed();
+        done(h);
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
@@ -121,17 +121,26 @@ public final class ProtectionGameTests {
         BlockPos block = corner.offset(15, 0, 8);
         BlockPos into = corner.offset(16, 0, 8);
         claim(level, into, UUID.randomUUID());
-        BordersGameTests.force(level, true, piston, into); // иначе поршень в нетикающем чанке не сработает и тест пройдёт впустую
+        // событие блока поршня зовём сами (triggerEvent, там же PistonEvent.Pre): чанк теста не тикает
+        boolean blocked = push(level, piston, block, into);
+        // то же внутри свободного чанка двигает: тест что-то проверяет
+        BlockPos wildPiston = corner.offset(4, 0, 8);
+        boolean moved = !push(level, wildPiston, wildPiston.east(), wildPiston.east(2));
+        free(level, into);
+        if (!moved) h.fail("поршень не двигает и на свободной земле: тест ничего не проверяет");
+        if (!blocked) h.fail("поршень со свободной земли втолкнул блок на землю команды");
+        done(h);
+    }
+
+    /** Поршень лицом на восток толкает камень; отвечает, остался ли камень на месте и не пришёл ли в {@code into}. */
+    private static boolean push(ServerLevel level, BlockPos piston, BlockPos block, BlockPos into) {
         level.setBlock(block, Blocks.STONE.defaultBlockState(), 3);
-        level.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST), 3);
-        level.setBlock(piston.west(), Blocks.REDSTONE_BLOCK.defaultBlockState(), 3);
-        h.runAfterDelay(6, () -> {
-            boolean ok = level.getBlockState(block).is(Blocks.STONE) && !level.getBlockState(into).is(Blocks.STONE);
-            free(level, into);
-            BordersGameTests.force(level, false, piston, into);
-            if (!ok) h.fail("поршень со свободной земли втолкнул блок на землю команды");
-            h.succeed();
-        });
+        level.setBlock(into, Blocks.AIR.defaultBlockState(), 3);
+        net.minecraft.world.level.block.state.BlockState state = Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST);
+        level.setBlock(piston, state, 2);
+        level.setBlock(piston.west(), Blocks.REDSTONE_BLOCK.defaultBlockState(), 2); // сигнал, без обновления соседей
+        level.getBlockState(piston).triggerEvent(level, piston, 0, Direction.EAST.get3DDataValue());
+        return level.getBlockState(block).is(Blocks.STONE) && !level.getBlockState(into).is(Blocks.STONE);
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
@@ -153,6 +162,14 @@ public final class ProtectionGameTests {
         } finally {
             free(level, pos);
         }
-        h.succeed();
+        done(h);
+    }
+
+    /**
+     * Успех через несколько тиков: синхронная загрузка чанка ставит временный билет, и если тест кончился в том же тике,
+     * остановка сервера GameTest крутится в выгрузке чанков бесконечно.
+     */
+    static void done(GameTestHelper h) {
+        h.runAfterDelay(3, h::succeed);
     }
 }

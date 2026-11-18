@@ -195,6 +195,10 @@ public final class ClaimService {
             LongList later = new LongArrayList();
             for (int i = 0; i < todo.size(); i++) {
                 long chunk = todo.getLong(i);
+                if (Chunks.sablePlot(chunk)) {
+                    r.skip(Skip.DIMENSION);
+                    continue;
+                }
                 Claim c = data.get(dim, chunk);
                 if (c != null) {
                     if (!c.team().equals(team)) r.skip(Skip.OTHER_TEAM);
