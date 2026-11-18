@@ -6,6 +6,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "Ae2SpatialMixin",
+    "Ae2SpatialPortMixin",
     "CreateActorsMixin",
     "CreateArmMixin",
     "CreateArmPointMixin",

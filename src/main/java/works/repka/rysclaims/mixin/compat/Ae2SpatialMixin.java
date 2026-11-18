@@ -17,7 +17,7 @@ import works.repka.rysclaims.server.Machines;
  * Пространственный ввод-вывод AE2 19.2.19 (R0, раздел 2): {@code SpatialStorageCellItem.doSpatialTransition(ячейка,
  * уровень, min, max, игрок)} пишет блоки прямо в секции чанков. Перенос не идёт, если хоть один чанк области на земле, где
  * хозяину сети (номер игрока AE2 переводится в UUID через {@code IPlayerRegistry}) строить нельзя. Без хозяина решает
- * «Машины снаружи».
+ * место порта ввода-вывода (как у машины с блок-сущностью), без места «Машины снаружи».
  */
 @Pseudo
 @Mixin(targets = "appeng.items.storage.SpatialStorageCellItem", remap = false)
@@ -27,7 +27,11 @@ abstract class Ae2SpatialMixin {
     @Inject(method = "doSpatialTransition(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/BlockPos;I)Z",
         at = @At("HEAD"), cancellable = true, require = 0)
     private void rysclaims$transition(ItemStack cell, ServerLevel level, BlockPos min, BlockPos max, int playerId, CallbackInfoReturnable<Boolean> cir) {
-        if (!Machines.area(level, min, max, rysclaims$owner(level, playerId), null, "ae2:spatial_io")) cir.setReturnValue(false);
+        // место это порт ввода-вывода, если перенос идёт из его transition() (Ae2SpatialPortMixin): своя область переносится
+        // и у сети без хозяина
+        net.minecraft.world.level.block.entity.BlockEntity port = Machines.actor();
+        BlockPos from = port != null && port.getLevel() == level ? port.getBlockPos() : null;
+        if (!Machines.area(level, min, max, rysclaims$owner(level, playerId), from, "ae2:spatial_io")) cir.setReturnValue(false);
     }
 
     private static UUID rysclaims$owner(ServerLevel level, int playerId) {
