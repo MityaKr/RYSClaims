@@ -145,4 +145,17 @@ class SyncTest {
         Rights back = Rights.fromBits(r.bits());
         assertEquals(r, back);
     }
+
+    /** «Открытая база» окна прав (макет S1): чужие открывают двери и сундуки, но не строят; это не набор OPEN. */
+    @Test
+    void openBaseRights() {
+        Rights r = Rights.openBase();
+        assertTrue(r.allows(Rights.Action.OPEN, Rights.Relation.OTHER, null), "чужие открывают");
+        assertTrue(r.allows(Rights.Action.USE, Rights.Relation.OTHER, null), "чужие жмут двери");
+        assertFalse(r.allows(Rights.Action.BUILD, Rights.Relation.OTHER, null), "чужие не строят");
+        assertFalse(r.allows(Rights.Action.ENTITY, Rights.Relation.OTHER, null), "чужие не трогают животных");
+        assertTrue(r.allows(Rights.Action.BUILD, Rights.Relation.ALLY, null), "союз строит");
+        assertNull(r.preset(), "своя таблица, не набор");
+        assertEquals(r, Rights.fromBits(r.bits()), "уходит по сети без потерь");
+    }
 }

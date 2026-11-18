@@ -69,6 +69,19 @@ public final class Rights {
         return r;
     }
 
+    /**
+     * «Открытая база» окна прав (разбор скептика 18.11, макет S1): строят и трогают животных команда и союз, двери и сундуки
+     * открывают все. Для магазинов и общих ферм; в отличие от набора {@link Preset#OPEN} чужие не строят.
+     */
+    public static Rights openBase() {
+        Rights r = new Rights();
+        r.set(Action.BUILD, Preset.TEAM_AND_ALLIES);
+        r.set(Action.ENTITY, Preset.TEAM_AND_ALLIES);
+        r.set(Action.OPEN, Preset.OPEN);
+        r.set(Action.USE, Preset.OPEN);
+        return r;
+    }
+
     public Rights copy() {
         Rights r = new Rights();
         for (Action a : Action.values()) {

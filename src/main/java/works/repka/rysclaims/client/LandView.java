@@ -92,6 +92,8 @@ public final class LandView {
     /** Участок, чьё меню открыто, и участок, который переименовывается; -1: нет. */
     private int menuPlot = -1, renaming = -1;
     private boolean trusting;
+    /** Права: «Подробно» (таблица по ролям и все переключатели) вместо трёх наборов карточками (макет S1). */
+    private boolean rightsDetail;
     private final Field rename = new Field(100, 10), trustField = new Field(80, 10);
     private Kit.@Nullable Dialog dialog;
     private double centerX, centerZ, cell = 16;
@@ -951,6 +953,12 @@ public final class LandView {
         int bits = askedBits >= 0 ? askedBits : h.rights();
         Rights r = Rights.fromBits(bits);
         boolean edit = h.canRights();
+        if (!rightsDetail) {
+            rightsSimple(g, t, h, r, edit, mx, my);
+            rightsUndo(g, t, h, mx, my);
+            visList(g, t, mx, my);
+            return;
+        }
         int x = wx + 14, top = wy + HEADER + BAR + 4;
 
         // набор справа в строке пилюль
@@ -962,6 +970,12 @@ public final class LandView {
         Draw.label(g, setLabel, dx - 6 - Draw.labelWidth(setLabel, 12, Weight.REGULAR), wy + HEADER + 13, 12, Weight.REGULAR, t.c("text.muted"));
         if (edit) Kit.dropdown(g, t, hits, presetDrop, dx, wy + HEADER + 6, dropW, label, false, mx, my);
         else Draw.label(g, label, dx + 5, wy + HEADER + 13, 12.5f, Weight.REGULAR, t.c("text.secondary"));
+        String simple = Words.t("rights.simple.back");
+        int sbw = (int) Kit.buttonWidth(simple, 12);
+        Kit.button(g, t, hits, dx - 6 - (int) Draw.labelWidth(setLabel, 12, Weight.REGULAR) - 12 - sbw, wy + HEADER + 6, sbw, 14, simple, false, mx, my, () -> {
+            presetDrop.close();
+            rightsDetail = false;
+        });
 
         // таблица: у одиночки «Ты, Доверенные, Все», у команды столбцы по ролям (макет 41)
         boolean roles = !h.solo();
@@ -1034,19 +1048,7 @@ public final class LandView {
             Draw.label(g, Words.result(res), x, y + 4, 11.5f, Weight.REGULAR, deny(t));
         }
 
-        // «Права изменены · Вернуть · 26 с» (макет 41)
-        long left = undoUntil - System.currentTimeMillis();
-        if (undoBits >= 0 && left > 0) {
-            int sy = wy + wh - 10 - 20, sx = wx + 10, sw = ww - 20, sh = 20;
-            Draw.roundBox(g, sx, sy, sw, sh, 5, t.c("sidebar.bg"), t.c("panel.border"));
-            Icons.draw(g, Icons.Shape.WARN, sx + 8, sy + 6, 8, t.c("state.warn"));
-            Draw.label(g, Words.t("rights.changed"), sx + 21, sy + sh / 2f, 12, Weight.SEMIBOLD, t.c("text.primary"));
-            String back = Words.t("rights.undo", (left + 999) / 1000);
-            int bw = (int) Kit.buttonWidth(back, 12);
-            Kit.button(g, t, hits, sx + sw - 6 - bw, sy + 3, bw, 14, back, false, mx, my, () -> undo(h));
-        } else {
-            undoBits = -1;
-        }
+        rightsUndo(g, t, h, mx, my);
 
         if (presetDrop.open) {
             List<Kit.Option> options = new ArrayList<>();
@@ -1065,6 +1067,127 @@ public final class LandView {
             });
         }
         visList(g, t, mx, my);
+    }
+
+    /** «Права изменены · Вернуть · 26 с» (макет 41): полоса внизу окна, пока не прошло полминуты после правки. */
+    private void rightsUndo(GuiGraphics g, Theme t, ClaimsNet.Hello h, int mx, int my) {
+        long left = undoUntil - System.currentTimeMillis();
+        if (undoBits >= 0 && left > 0) {
+            undoBar(g, t, Words.t("rights.changed"), left, mx, my, () -> undo(h));
+        } else {
+            undoBits = -1;
+        }
+    }
+
+    /** Полоса «… · Вернуть · N с» внизу окна (права и настройки сервера). */
+    void undoBar(GuiGraphics g, Theme t, String text, long left, int mx, int my, Runnable back) {
+        int sy = wy + wh - 10 - 20, sx = wx + 10, sw = ww - 20, sh = 20;
+        Draw.roundBox(g, sx, sy, sw, sh, 5, t.c("sidebar.bg"), t.c("panel.border"));
+        Icons.draw(g, Icons.Shape.WARN, sx + 8, sy + 6, 8, t.c("state.warn"));
+        Draw.label(g, Draw.ellipsize(text, sw - 120, 12, Weight.SEMIBOLD), sx + 21, sy + sh / 2f, 12, Weight.SEMIBOLD, t.c("text.primary"));
+        String label = Words.t("rights.undo", (left + 999) / 1000);
+        int bw = (int) Kit.buttonWidth(label, 12);
+        Kit.button(g, t, hits, sx + sw - 6 - bw, sy + 3, bw, 14, label, false, mx, my, back);
+    }
+
+    /** Три набора прав карточками (разбор скептика 18.11, макет S1). */
+    private static final String[] SIMPLE_SETS = {"team", "team_and_allies", "open_base"};
+
+    private static Rights simpleSet(int i) {
+        return switch (i) {
+            case 0 -> Rights.of(Rights.Preset.TEAM);
+            case 1 -> Rights.of(Rights.Preset.TEAM_AND_ALLIES);
+            default -> Rights.openBase();
+        };
+    }
+
+    /** Строки карточки: знак «можно» в первом символе ключа перевода не хранится, он здесь. */
+    private static final boolean[][] SIMPLE_LINES = {{true, false, false}, {true, true, false}, {true, true, false}};
+
+    /**
+     * Права просто (макет S1): «Кто что может на нашей земле» тремя карточками наборов, доверенные строкой, три главных
+     * переключателя (мобы, машины на своей земле, кто видит землю), остальное под «Подробно».
+     */
+    private void rightsSimple(GuiGraphics g, Theme t, ClaimsNet.Hello h, Rights r, boolean edit, int mx, int my) {
+        int x = wx + 14, y = wy + HEADER + BAR + 6, w = ww - 28;
+        String solo = h.solo() ? "solo." : "";
+        Kit.caps(g, t, Words.t("rights.simple.head"), x, y + 4, 10.5f, 0.6f);
+        y += 11;
+        int gap = 8, cw = (w - gap * 2) / 3, ch = 62;
+        int chosen = -1;
+        for (int i = 0; i < 3; i++) if (r.equals(simpleSet(i))) chosen = i;
+        for (int i = 0; i < 3; i++) {
+            int cx = x + i * (cw + gap), pick = i;
+            Runnable select = edit ? () -> simpleEdit(h, pick) : () -> {};
+            Kit.radioRow(g, t, hits, cx, y, cw, ch, chosen == i, mx, my, select);
+            String key = "rights.simple." + solo + SIMPLE_SETS[i];
+            Draw.label(g, Draw.ellipsize(Words.t(key), cw - 26, 13, Weight.SEMIBOLD), cx + 8, y + 9, 13, Weight.SEMIBOLD, t.c("text.primary"));
+            Draw.label(g, Draw.ellipsize(Words.t(key + ".note"), cw - 14, 10.5f, Weight.REGULAR), cx + 8, y + 19, 10.5f, Weight.REGULAR, t.c("text.muted"));
+            for (int l = 0; l < 3; l++) {
+                boolean ok = SIMPLE_LINES[i][l];
+                int ly = y + 30 + l * 10;
+                Icons.draw(g, ok ? Icons.Shape.CHECK : Icons.Shape.CROSS, cx + 8, ly - 3, 7, ok ? t.c("state.ok") : deny(t));
+                Draw.label(g, Draw.ellipsize(Words.t(key + "." + (l + 1)), cw - 26, 11.5f, Weight.REGULAR), cx + 19, ly + 0.5f, 11.5f, Weight.REGULAR,
+                    t.c(ok ? "text.primary" : "text.secondary"));
+            }
+        }
+        y += ch + 4;
+        if (chosen < 0) {
+            Draw.label(g, Words.t("rights.simple.custom"), x, y + 4, 11, Weight.REGULAR, t.c("state.warn"));
+            y += 9;
+        }
+        y += 3;
+        // доверенные строкой
+        Draw.roundBox(g, x, y, w, 24, 5, t.c("card.bg"), t.c("card.border"));
+        trusted(g, t, h, edit, x + 8, y + 4, w - 16, mx, my);
+        y += 30;
+        // три главных переключателя
+        ClaimsNet.LandState st = LandCache.state();
+        int rowH = 20;
+        Draw.roundBox(g, x, y, w, rowH * 3 + 4, 5, t.c("card.bg"), t.c("card.border"));
+        switchRow(g, t, st, TeamLand.Flag.MOB_GRIEF, edit, x + 8, y + 2, w - 16, mx, my);
+        Kit.divider(g, t, x + 6, y + 2 + rowH, w - 12);
+        switchRow(g, t, st, TeamLand.Flag.MACHINES_INSIDE, edit, x + 8, y + 2 + rowH, w - 16, mx, my);
+        Kit.divider(g, t, x + 6, y + 2 + rowH * 2, w - 12);
+        visibility(g, t, st, edit, x + 8, y + 2 + rowH * 2, w - 16, mx, my);
+        y += rowH * 3 + 4 + 7;
+        // «Подробно»
+        String more = Words.t("rights.simple.more");
+        float mw = Draw.labelWidth(more, 12, Weight.REGULAR);
+        boolean hot = Kit.over(mx, my, x, y, (int) mw + 10, 12);
+        Icons.draw(g, Icons.Shape.CHEVRON_RIGHT, x, y + 2.5f, 6, t.c("accent.text"));
+        Draw.label(g, more, x + 9, y + 6, 12, Weight.REGULAR, hot ? t.c("text.primary") : t.c("accent.text"));
+        hits.add(x, y, (int) mw + 10, 12, b -> {
+            visDrop.close();
+            rightsDetail = true;
+        });
+        String hidden = Words.t("rights.simple.more.note");
+        float hw = Draw.labelWidth(hidden, 11, Weight.REGULAR);
+        Draw.label(g, hidden, x + w - hw, y + 6, 11, Weight.REGULAR, t.c("text.muted"));
+        y += 16;
+        if (!edit) {
+            for (String line : Draw.wrapLabel(Words.t(h.rightsLocked() ? "rights.locked" : "rights.no_right"), w, 11.5f, Weight.REGULAR, 2)) {
+                Draw.label(g, line, x, y + 4, 11.5f, Weight.REGULAR, t.c("text.muted"));
+                y += 8;
+            }
+        }
+        ClaimsNet.EditResult res = LandCache.result(RESULT_MS);
+        if (res != null && (res.op() == ClaimsNet.OP_RIGHTS || res.op() >= ClaimsNet.OP_LAND) && res.done() == 0) {
+            Draw.label(g, Words.result(res), x, y + 4, 11.5f, Weight.REGULAR, deny(t));
+        }
+    }
+
+    private void simpleEdit(ClaimsNet.Hello h, int i) {
+        if (i < 2) {
+            presetEdit(h, i == 0 ? Rights.Preset.TEAM : Rights.Preset.TEAM_AND_ALLIES);
+            return;
+        }
+        int now = askedBits >= 0 ? askedBits : h.rights();
+        remember(h, now);
+        askedBits = Rights.openBase().bits();
+        LandCache.clearResult();
+        LandCache.editedAccess();
+        LandCache.send(new ClaimsNet.RightsEdit(ClaimsNet.RIGHTS_TABLE, 0, 0, false, askedBits));
     }
 
     static String presetName(Rights.Preset p, boolean solo) {
@@ -1552,32 +1675,36 @@ public final class LandView {
                 visibility(g, t, st, edit, cx, cy, colW, mx, my);
                 continue;
             }
-            TeamLand.Flag f = SWITCHES[i];
-            String key = "switch." + f.key;
-            Draw.label(g, Words.t(key), cx, cy + 5, 12, Weight.REGULAR, t.c("text.primary"));
-            Draw.label(g, Draw.ellipsize(Words.t(key + ".note"), colW - 30, 10.5f, Weight.REGULAR), cx, cy + 12.5f, 10.5f, Weight.REGULAR, t.c("text.muted"));
-            boolean on = st == null ? f.def : (st.flags() >> f.ordinal() & 1) != 0;
-            String lock = null;
-            if (st != null && (st.lockMask() >> f.ordinal() & 1) != 0) {
-                on = (st.lockValues() >> f.ordinal() & 1) != 0;
-                lock = Words.t("switch.locked", Words.t(on ? "switch.on" : "switch.off"));
-            } else if (f == TeamLand.Flag.PVP && st != null && st.pvpMode() != works.repka.rysclaims.data.Settings.PvpMode.TEAM.ordinal()) {
-                on = st.pvpMode() == works.repka.rysclaims.data.Settings.PvpMode.ALWAYS.ordinal();
-                lock = Words.t("switch.locked", Words.t(on ? "switch.pvp.always" : "switch.pvp.never"));
-            }
-            int tx = cx + colW - 18;
-            if (lock != null) {
-                float lw = Draw.labelWidth(lock, 10.5f, Weight.REGULAR);
-                Draw.label(g, lock, tx - 5 - lw, cy + 8, 10.5f, Weight.REGULAR, t.c("text.muted"));
-                Draw.lock(g, (int) (tx - 5 - lw - 8), cy + 4, t.c("text.muted"));
-            }
-            boolean can = edit && lock == null;
-            boolean hot = can && Kit.over(mx, my, tx, cy + 3, 18, 10);
-            Kit.toggle(g, t, tx, cy + 3, on, hot);
-            if (can) {
-                boolean next = !on;
-                hits.add(tx, cy + 3, 18, 10, b -> landEdit(ClaimsNet.LAND_FLAG, f.ordinal(), next, ""));
-            }
+            switchRow(g, t, st, SWITCHES[i], edit, cx, cy, colW, mx, my);
+        }
+    }
+
+    /** Переключатель строкой: название, пояснение, справа тумблер; закреплённое сервером с замком и словами «решает сервер». */
+    private void switchRow(GuiGraphics g, Theme t, ClaimsNet.@Nullable LandState st, TeamLand.Flag f, boolean edit, int cx, int cy, int colW, int mx, int my) {
+        String key = "switch." + f.key;
+        Draw.label(g, Words.t(key), cx, cy + 5, 12, Weight.REGULAR, t.c("text.primary"));
+        Draw.label(g, Draw.ellipsize(Words.t(key + ".note"), colW - 30, 10.5f, Weight.REGULAR), cx, cy + 12.5f, 10.5f, Weight.REGULAR, t.c("text.muted"));
+        boolean on = st == null ? f.def : (st.flags() >> f.ordinal() & 1) != 0;
+        String lock = null;
+        if (st != null && (st.lockMask() >> f.ordinal() & 1) != 0) {
+            on = (st.lockValues() >> f.ordinal() & 1) != 0;
+            lock = Words.t("switch.locked", Words.t(on ? "switch.on" : "switch.off"));
+        } else if (f == TeamLand.Flag.PVP && st != null && st.pvpMode() != works.repka.rysclaims.data.Settings.PvpMode.TEAM.ordinal()) {
+            on = st.pvpMode() == works.repka.rysclaims.data.Settings.PvpMode.ALWAYS.ordinal();
+            lock = Words.t("switch.locked", Words.t(on ? "switch.pvp.always" : "switch.pvp.never"));
+        }
+        int tx = cx + colW - 18;
+        if (lock != null) {
+            float lw = Draw.labelWidth(lock, 10.5f, Weight.REGULAR);
+            Draw.label(g, lock, tx - 5 - lw, cy + 8, 10.5f, Weight.REGULAR, t.c("text.muted"));
+            Draw.lock(g, (int) (tx - 5 - lw - 8), cy + 4, t.c("text.muted"));
+        }
+        boolean can = edit && lock == null;
+        boolean hot = can && Kit.over(mx, my, tx, cy + 3, 18, 10);
+        Kit.toggle(g, t, tx, cy + 3, on, hot);
+        if (can) {
+            boolean next = !on;
+            hits.add(tx, cy + 3, 18, 10, b -> landEdit(ClaimsNet.LAND_FLAG, f.ordinal(), next, ""));
         }
     }
 
