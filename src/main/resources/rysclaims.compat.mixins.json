@@ -12,6 +12,8 @@
     "CreateAssembleMixin",
     "CreateBreakerMixin",
     "CreateContraptionMixin",
+    "CreateDisassembleMixin",
+    "CreateGantryMixin",
     "CreateInventoryMixin",
     "CreateKineticBreakerMixin",
     "CreateRollerMixin",
@@ -30,7 +32,11 @@
     "OritechTreefellerMixin",
     "ProductiveBeesFarmerMixin",
     "RftoolsBuilderMixin",
-    "SableAssemblyMixin"
+    "SableAssemblerMixin",
+    "SableAssemblyMixin",
+    "SableDisassembleMixin",
+    "SablePacketMixin",
+    "SableSwivelMixin"
   ],
   "injectors": {
     "defaultRequire": 0

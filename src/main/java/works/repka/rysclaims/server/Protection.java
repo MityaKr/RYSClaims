@@ -212,6 +212,22 @@ public final class Protection {
         if (!fake && player instanceof ServerPlayer sp) feedback(s, sp, reason, owner);
     }
 
+    /**
+     * Отказ без игрока-виновника (разборка постройки): причина у прицела игроку {@code actor}, а без него всем игрокам в 16
+     * блоках от {@code pos} (не чаще раза в секунду каждому).
+     */
+    public static void tellNear(Level level, BlockPos pos, ClaimService.Reason reason, @Nullable UUID owner, @Nullable Player actor) {
+        ClaimService s = service(level);
+        if (s == null) return;
+        if (actor instanceof ServerPlayer sp && !(actor instanceof FakePlayer)) {
+            feedback(s, sp, reason, owner);
+            return;
+        }
+        for (Player p : level.players()) {
+            if (p instanceof ServerPlayer sp && !(p instanceof FakePlayer) && p.blockPosition().closerThan(pos, 16)) feedback(s, sp, reason, owner);
+        }
+    }
+
     /** Причина у прицела (пакет {@code Denied}) или строкой над хотбаром, если у клиента нет канала. */
     static void feedback(ClaimService s, ServerPlayer sp, ClaimService.Reason reason, @Nullable UUID owner) {
         long now = System.currentTimeMillis();
@@ -250,6 +266,7 @@ public final class Protection {
             case EXPLOSION -> "Explosions do not break blocks here";
             case OPERATOR -> "Operator edit";
             case GRAVE -> "Took back own grave";
+            case DISASSEMBLE -> "The structure cannot be disassembled: blocks would land on someone else's land";
         };
     }
 

@@ -221,6 +221,36 @@ public final class Machines {
         return true;
     }
 
+    /**
+     * Разборка постройки (Create, Sable) положит блоки в {@code targets}: команда первого закрытого ей чанка или null, если
+     * все чанки открыты. Правило то же, что у машины с известным местом ({@code from}: блок управления или дом постройки),
+     * каждый чанк проверяется один раз. Отказ уходит в журнал хозяев одной строкой.
+     */
+    public static @Nullable UUID disassembly(Level level, @Nullable BlockPos from, Iterable<BlockPos> targets, String name) {
+        ClaimService s = service(level);
+        if (s == null) return null;
+        String dim = Loader.id(level.dimension());
+        if (!s.data().anyIn(dim)) return null;
+        long fromChunk = Long.MIN_VALUE;
+        if (from != null) {
+            BlockPos f = SableLand.toWorld(level, from);
+            fromChunk = Chunks.pack(f.getX() >> 4, f.getZ() >> 4);
+        }
+        it.unimi.dsi.fastutil.longs.LongOpenHashSet seen = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        for (BlockPos raw : targets) {
+            BlockPos target = SableLand.toWorld(level, raw);
+            long chunk = Chunks.pack(target.getX() >> 4, target.getZ() >> 4);
+            if (!seen.add(chunk) || chunk == fromChunk) continue;
+            UUID owner = s.data().owner(dim, chunk);
+            if (owner == null) continue;
+            if (!s.canMachine(dim, fromChunk, null, chunk, Rights.Action.BUILD, FAR)) {
+                log(s, dim, chunk, null, name, target);
+                return owner;
+            }
+        }
+        return null;
+    }
+
     /** Взрыв из точки {@code center} без хозяина (реактор Draconic) убирает блок {@code target}: правило строки 15. */
     public static boolean explosion(Level level, BlockPos center, BlockPos target) {
         if (((center.getX() ^ target.getX()) >> 4) == 0 && ((center.getZ() ^ target.getZ()) >> 4) == 0) return true;

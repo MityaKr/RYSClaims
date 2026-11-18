@@ -673,7 +673,9 @@ public final class ClaimService {
         /** Оператор правил землю команды в режиме оператора (только журнал). */
         OPERATOR,
         /** Хозяин могилы сломал её на чужой земле (только журнал). */
-        GRAVE;
+        GRAVE,
+        /** Разборка постройки положила бы блоки на землю, закрытую ей: постройка остаётся собранной. */
+        DISASSEMBLE;
 
         public String key() {
             return name().toLowerCase(java.util.Locale.ROOT);

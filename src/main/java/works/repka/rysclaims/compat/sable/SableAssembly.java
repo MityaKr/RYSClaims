@@ -37,13 +37,16 @@ public final class SableAssembly {
         return kept;
     }
 
-    /** После сборки: дом подуровня это команда земли якоря (ничья земля: дома нет). */
+    /** После сборки: дом подуровня это команда земли якоря; на ничьей земле команда игрока сборщика, если он известен, иначе дома нет. */
     public static void assembled(ServerLevel level, BlockPos anchor, @Nullable Object subLevel) {
         if (subLevel == null || !ClaimsServer.running()) return;
         UUID id = SableLand.id(subLevel);
         if (id == null) return;
         ClaimService s = ClaimsServer.service();
         UUID home = owner(s, level, Loader.id(level.dimension()), anchor);
+        // ничья земля: дом это команда игрока, который дёрнул рычаг сборщика (иначе свою постройку не разобрать у себя)
+        net.minecraft.world.entity.player.Player actor = SableDisassembly.actor();
+        if (home == null && actor != null) home = s.teams().teamOf(actor.getUUID());
         s.data().home(id, home);
         ClaimsServer.markDirty();
     }
