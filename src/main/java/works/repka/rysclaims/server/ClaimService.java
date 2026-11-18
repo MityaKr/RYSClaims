@@ -139,7 +139,8 @@ public final class ClaimService {
     /** Последнее слияние на случай отмены: что ушло от команды. */
     private final Map<UUID, Merge> merges = new HashMap<>();
 
-    private record Merge(UUID into, Map<String, LongList> chunks, int bonusClaims, int bonusForce, Map<Integer, Integer> plots) {}
+    private record Merge(UUID into, Map<String, LongList> chunks, int bonusClaims, int bonusForce, ClaimData.PlotSnapshot fromPlots,
+                         ClaimData.PlotSnapshot intoPlots) {}
 
     public ClaimService(ClaimData data, Supplier<Settings> settings, Teams teams, LongSupplier clock, Hooks hooks) {
         this.data = data;
@@ -829,6 +830,8 @@ public final class ClaimService {
             for (long chunk : e.getValue()) {
                 if (n >= room) break;
                 data.reassign(e.getKey(), chunk, to);
+                // номер участка бывшей команды новой не годится (перепроверка 18.11, пункт 12)
+                data.clearPlot(e.getKey(), chunk);
                 // в личную землю чанк вернулся: снова личный, не «принесённый»
                 if (to.equals(player)) data.brought(e.getKey(), chunk, false);
                 moved.computeIfAbsent(e.getKey(), d -> new LongArrayList()).add(chunk);
@@ -947,9 +950,9 @@ public final class ClaimService {
     public void merged(UUID from, UUID into) {
         TeamLand src = data.land(from);
         int bc = src == null ? 0 : src.bonusClaims, bf = src == null ? 0 : src.bonusForce;
-        Map<Integer, Integer> plotMap = new HashMap<>();
-        var moved = data.transfer(from, into, plotMap);
-        merges.put(from, new Merge(into, moved, bc, bf, plotMap));
+        ClaimData.PlotSnapshot fromPlots = data.plotSnapshot(from), intoPlots = data.plotSnapshot(into);
+        var moved = data.transfer(from, into);
+        merges.put(from, new Merge(into, moved, bc, bf, fromPlots, intoPlots));
         TeamLand dst = data.landOrCreate(into);
         if (dst.claimed() > limits(into).claims && dst.overSince == 0) dst.overSince = clock.getAsLong();
         after(from, into, moved);
@@ -958,16 +961,32 @@ public final class ClaimService {
     public void mergeUndone(UUID from, UUID into) {
         Merge m = merges.remove(from);
         if (m == null || !m.into.equals(into)) return;
+        Map<String, LongList> back = new LinkedHashMap<>();
         for (Map.Entry<String, LongList> e : m.chunks.entrySet()) {
-            for (long chunk : e.getValue()) data.reassign(e.getKey(), chunk, from);
+            for (long chunk : e.getValue()) {
+                // чанк, который за эти 30 секунд освободили и заняла третья команда, остаётся у неё (перепроверка 18.11, пункт 11)
+                if (!into.equals(data.owner(e.getKey(), chunk))) continue;
+                data.reassign(e.getKey(), chunk, from);
+                back.computeIfAbsent(e.getKey(), d -> new LongArrayList()).add(chunk);
+            }
         }
-        data.restorePlots(from, into, m.plots);
+        // участки обеих команд как до слияния: номера и имена (перепроверка 18.11, пункт 12)
+        data.landOrCreate(into).plots.keySet().removeIf(id -> !m.intoPlots.plots().containsKey(id) && isTransferredPlot(m, id));
+        data.restorePlots(from, m.fromPlots);
+        data.restorePlots(into, m.intoPlots);
         TeamLand dst = data.landOrCreate(into), src = data.landOrCreate(from);
         dst.bonusClaims -= m.bonusClaims;
         dst.bonusForce -= m.bonusForce;
         src.bonusClaims += m.bonusClaims;
         src.bonusForce += m.bonusForce;
-        after(into, from, m.chunks);
+        after(into, from, back);
+        // пересчёт принимающей и в измерениях, откуда ничего не вернулось: её участки тоже вернулись
+        for (String dim : m.intoPlots.chunks().keySet()) if (!back.containsKey(dim)) plots(into, dim);
+    }
+
+    /** Участок принимающей, появившийся после слияния (номер не меньше снимка): это перенесённые участки уходящей, их убираем. */
+    private static boolean isTransferredPlot(Merge m, int id) {
+        return id >= m.intoPlots.nextPlot();
     }
 
     private void after(UUID from, UUID to, Map<String, LongList> moved) {

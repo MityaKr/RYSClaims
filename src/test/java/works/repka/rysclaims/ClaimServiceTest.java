@@ -336,6 +336,29 @@ class ClaimServiceTest {
         assertEquals(0, data.land(TEAM).bonusClaims);
     }
 
+    /** Отмена слияния: чанк, занятый третьей командой, остаётся у неё; участки обеих команд с прежними номерами и именами. */
+    @Test
+    void mergeUndoKeepsPlotsAndThirdTeam() {
+        settings.releaseSeconds = 0;
+        service.claim(LEADER, TEAM, OW, Chunks.square(0, 0, 1), false); // 9, участок команды
+        service.claim(ALLY, OTHER, OW, Chunks.square(3, 0, 1), false); // 9, касается стороной (x 2 и 3)
+        int teamPlot = data.get(OW, Chunks.pack(0, 0)).plot(), otherPlot = data.get(OW, Chunks.pack(3, 0)).plot();
+        service.renamePlot(LEADER, TEAM, teamPlot, "Дом", false);
+        service.renamePlot(ALLY, OTHER, otherPlot, "Ферма", false);
+        service.merged(OTHER, TEAM);
+        // принимающая освобождает чанк влившейся, его занимает третья команда
+        UUID third = UUID.fromString("00000000-0000-0000-0000-0000000000a3");
+        service.release(LEADER, TEAM, OW, one(4, 1), false);
+        service.tick();
+        service.claim(null, third, OW, one(4, 1), true);
+        service.mergeUndone(OTHER, TEAM);
+        assertEquals(third, data.owner(OW, Chunks.pack(4, 1)), "чанк третьей команды не отнят");
+        assertEquals(OTHER, data.owner(OW, Chunks.pack(3, 0)));
+        assertEquals("Дом", service.plot(TEAM, data.get(OW, Chunks.pack(0, 0)).plot()).name, "имя участка принимающей на месте");
+        assertEquals("Ферма", service.plot(OTHER, data.get(OW, Chunks.pack(3, 0)).plot()).name, "имя участка влившейся вернулось");
+        assertEquals(teamPlot, data.get(OW, Chunks.pack(0, 0)).plot(), "номер участка принимающей прежний");
+    }
+
     @Test
     void rightsEditing() {
         assertTrue(service.editsRights(LEADER, TEAM, false));

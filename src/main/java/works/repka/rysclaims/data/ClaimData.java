@@ -258,6 +258,47 @@ public final class ClaimData {
         return moved;
     }
 
+    /** Снимок участков команды: таблица участков и номер участка у каждого её чанка (для отмены слияния). */
+    public record PlotSnapshot(Map<Integer, Plot> plots, int nextPlot, Map<String, it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap> chunks) {}
+
+    public PlotSnapshot plotSnapshot(UUID team) {
+        TeamLand land = teams.get(team);
+        Map<Integer, Plot> plots = land == null ? Map.of() : new LinkedHashMap<>(land.plots);
+        Map<String, it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap> chunks = new HashMap<>();
+        for (Map.Entry<String, Long2ObjectOpenHashMap<Claim>> e : dims.entrySet()) {
+            for (Claim c : e.getValue().values()) {
+                if (c.team.equals(team)) chunks.computeIfAbsent(e.getKey(), d -> new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap()).put(c.pos, c.plot);
+            }
+        }
+        return new PlotSnapshot(plots, land == null ? 1 : land.nextPlot, chunks);
+    }
+
+    /**
+     * Возвращает участки по снимку (отмена слияния, перепроверка 18.11, пункт 12): участки снимка снова в таблице команды
+     * с прежними номерами и именами, чанки команды из снимка получают прежние номера. Участки, созданные после снимка,
+     * остаются; пересчёт ({@code Plots.rebuild}) потом сам разберётся с тем, что изменилось с тех пор.
+     */
+    public void restorePlots(UUID team, PlotSnapshot snap) {
+        TeamLand land = landOrCreate(team);
+        for (Plot p : snap.plots().values()) land.plots.put(p.id, new Plot(p.id, p.name, p.dim));
+        land.nextPlot = Math.max(land.nextPlot, snap.nextPlot());
+        for (Map.Entry<String, it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap> e : snap.chunks().entrySet()) {
+            Long2ObjectOpenHashMap<Claim> map = dims.get(e.getKey());
+            if (map == null) continue;
+            for (it.unimi.dsi.fastutil.longs.Long2IntMap.Entry x : e.getValue().long2IntEntrySet()) {
+                Claim c = map.get(x.getLongKey());
+                if (c != null && c.team.equals(team)) c.plot = x.getIntValue();
+            }
+        }
+    }
+
+    /** Чанк без участка: пересчёт даст ему номер своей команды (чужой номер после «забрать» не годится). */
+    public void clearPlot(String dimension, long chunk) {
+        Long2ObjectOpenHashMap<Claim> map = dims.get(dimension);
+        Claim c = map == null ? null : map.get(chunk);
+        if (c != null) c.plot = 0;
+    }
+
     /** Возвращает участки после отмены слияния: чанки {@code team} с номером из {@code plotMap} получают старый номер. */
     public void restorePlots(UUID team, UUID from, Map<Integer, Integer> plotMap) {
         TeamLand dst = teams.get(from), src = landOrCreate(team);
