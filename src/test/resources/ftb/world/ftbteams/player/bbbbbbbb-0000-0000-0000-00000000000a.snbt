@@ -1,0 +1,10 @@
+{
+	id: "bbbbbbbb-0000-0000-0000-00000000000a"
+	type: "player"
+	player_name: "Player_a"
+	ranks: { }
+	properties: {
+		"ftbteams:display_name": "Player_a"
+		"ftbchunks:block_edit_mode": "allies"
+	}
+}

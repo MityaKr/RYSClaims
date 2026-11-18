@@ -1,0 +1,27 @@
+{
+	id: "aaaaaaaa-0000-0000-0000-000000000001"
+	type: "party"
+	owner: "bbbbbbbb-0000-0000-0000-00000000000a"
+	ranks: {
+		bbbbbbbb-0000-0000-0000-00000000000a: "owner"
+		bbbbbbbb-0000-0000-0000-00000000000b: "member"
+		bbbbbbbb-0000-0000-0000-00000000000c: "ally"
+		bbbbbbbb-0000-0000-0000-00000000000e: "invited"
+	}
+	properties: {
+		"ftbteams:display_name": "Barsuki"
+		"ftbchunks:allow_explosions": 0b
+		"ftbchunks:allow_mob_griefing": 0b
+		"ftbchunks:allow_fake_players": 0b
+		"ftbchunks:allow_named_fake_players": [ "[IF]" ]
+		"ftbchunks:allow_fake_players_by_id": 1b
+		"ftbchunks:allow_pvp": 1b
+		"ftbchunks:block_edit_mode": "private"
+		"ftbchunks:block_interact_mode": "allies"
+		"ftbchunks:entity_interact_mode": "public"
+		"ftbchunks:nonliving_entity_attack_mode": "allies"
+		"ftbchunks:claim_visibility": "allies"
+	}
+	message_history: [ ]
+	extra: { }
+}

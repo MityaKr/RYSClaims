@@ -1,0 +1,12 @@
+run/
+run-server/
+run-repys/
+build/
+.gradle/
+_stale/
+libs/
+*.iml
+.idea/
+.vscode/
+out/
+logs/

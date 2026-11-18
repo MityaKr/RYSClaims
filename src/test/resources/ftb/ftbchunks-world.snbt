@@ -1,0 +1,32 @@
+# Заготовка в формате FTB Chunks 2101.1.22: вымышленные UUID и имена
+{
+	ally_mode: "default"
+	disable_protection: false
+	no_wilderness: false
+	no_wilderness_dimensions: [ ]
+	piston_protection: true
+	protect_unknown_explosions: true
+	pvp_mode: "always"
+	claiming: {
+		claim_dimension_blacklist: [ "test:void" ]
+		claim_dimension_whitelist: [ ]
+		hard_team_claim_limit: 0
+		max_claimed_chunks: 500
+		max_idle_days_before_unclaim: 0.0d
+		party_limit_mode: "largest"
+	}
+	force_loading: {
+		force_load_mode: "default"
+		hard_team_force_limit: 0
+		max_force_loaded_chunks: 25
+		max_idle_days_before_unforce: 0.0d
+	}
+	team_prop_defaults: {
+		def_block_edit: "allies"
+		def_block_interact: "allies"
+		def_entity_attack: "private"
+		def_entity_interact: "allies"
+		def_fake_player_ids: true
+		def_fake_players: false
+	}
+}

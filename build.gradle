@@ -1,0 +1,116 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+group = mod_group
+version = mod_version
+
+base {
+    archivesName = "${mod_id}-neoforge-${minecraft_version}"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'RYS family'
+        url = rootProject.file('../RYSCore/repo')
+        content { includeGroup 'works.repka.ryscore' }
+    }
+}
+
+// GameTest живут только в запусках для разработки и в jar не попадают.
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+neoForge {
+    version = neo_version
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.gametest
+        }
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = project.file('run')
+        }
+        // Тестовый сервер без окна: GameTest пространства rysclaims, вердикт в логе и коде выхода.
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = project.file('run-server')
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+            jvmArguments.addAll '-Xmx2G'
+        }
+    }
+}
+
+neoForge.addModdingDependenciesTo(sourceSets.gametest)
+
+// Проверки без игры видят классы игры и её библиотеки (NBT, fastutil, Gson), но игру не запускают.
+neoForge.addModdingDependenciesTo(sourceSets.test)
+
+dependencies {
+    implementation "works.repka.ryscore:ryscore-neoforge:${ryscore_version}"
+    jarJar("works.repka.ryscore:ryscore-neoforge:[${ryscore_version},2.0.0)") {
+        version { prefer ryscore_version }
+        transitive = false
+    }
+
+    gametestImplementation "works.repka.ryscore:ryscore-neoforge:${ryscore_version}"
+    testImplementation "works.repka.ryscore:ryscore-neoforge:${ryscore_version}"
+    testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+test {
+    useJUnitPlatform()
+    maxHeapSize = '1G'
+    // Настоящие файлы FTB сервера RepYS (вне git: там ники и UUID). Нет папки — проверки на них пропускаются.
+    systemProperty 'rysclaims.fixtures', project.findProperty('fixtures') ?: project.file('../../_shared/_saved/fixtures/ftb-2026-11-18').absolutePath
+    systemProperty 'rysclaims.samples', project.file('src/test/resources/ftb').absolutePath
+}
+
+tasks.named('check') {
+    dependsOn 'gametestClasses'
+}
+
+// Сервер GameTest выходит с кодом ошибки, если тест не прошёл; итог ещё и в логе.
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    doLast {
+        def log = file('run-server/logs/latest.log')
+        if (log.exists() && !log.readLines('UTF-8').any { it.contains('All 1 required tests passed') || it =~ /All \d+ required tests passed/ }) {
+            throw new GradleException('GameTest: no "required tests passed" line, see run-server/logs/latest.log')
+        }
+    }
+}
+
+processResources {
+    def props = [
+        mod_id: mod_id, mod_name: mod_name, mod_version: mod_version,
+        mod_authors: mod_authors, mod_license: mod_license,
+        minecraft_version_range: minecraft_version_range,
+        neo_version_range: neo_version_range,
+        ryscore_version: ryscore_version
+    ]
+    inputs.properties props
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand props
+    }
+}

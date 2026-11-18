@@ -1,0 +1,132 @@
+package works.repka.rysclaims.data;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+/**
+ * Настройки сервера одним снимком, без игры: их читают сервис и проверки. Живые значения собирает
+ * {@code server.ServerConfig#snapshot} из {@code rysclaims-server.toml}, проверки строят снимок сами.
+ */
+public final class Settings {
+    /** Как личные добавки участников складываются в команде (FTB {@code party_limit_mode}). */
+    public enum BonusMode {
+        /** Наибольшая из личных добавок (FTB {@code largest}, RepYS). */
+        LARGEST,
+        /** Сумма личных добавок. */
+        SUM,
+        /** Только добавка лидера (FTB {@code owner}). */
+        LEADER,
+        /** Средняя, с округлением вниз. */
+        AVERAGE;
+
+        public String key() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+
+        public static BonusMode parse(String key, BonusMode fallback) {
+            if ("owner".equalsIgnoreCase(key)) return LEADER;
+            for (BonusMode m : values()) if (m.key().equalsIgnoreCase(key)) return m;
+            return fallback;
+        }
+    }
+
+    /** Прогрузка: пока кто-то из команды в сети или всегда. Режим «и ещё N часов» придёт в 0.2. */
+    public enum LoadMode {
+        ONLINE, ALWAYS;
+
+        public String key() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+
+        public static LoadMode parse(String key, LoadMode fallback) {
+            for (LoadMode m : values()) if (m.key().equalsIgnoreCase(key)) return m;
+            return fallback;
+        }
+    }
+
+    /** Кого считать союзниками: как решит команда, всех, никого (FTB {@code ally_mode}). */
+    public enum AllyMode {
+        TEAM, ALL, NONE;
+
+        public static AllyMode parse(String key, AllyMode fallback) {
+            if ("default".equalsIgnoreCase(key)) return TEAM;
+            if ("forced_all".equalsIgnoreCase(key)) return ALL;
+            if ("forced_none".equalsIgnoreCase(key)) return NONE;
+            for (AllyMode m : values()) if (m.name().equalsIgnoreCase(key)) return m;
+            return fallback;
+        }
+    }
+
+    /** Бой на земле: везде, решает команда, нигде на участках (FTB {@code pvp_mode}). */
+    public enum PvpMode {
+        ALWAYS, TEAM, NEVER;
+
+        public static PvpMode parse(String key, PvpMode fallback) {
+            if ("per_team".equalsIgnoreCase(key)) return TEAM;
+            for (PvpMode m : values()) if (m.name().equalsIgnoreCase(key)) return m;
+            return fallback;
+        }
+    }
+
+    // ---- лимиты ----
+    public int claimsPerTeam = 500;
+    public int forcePerTeam = 25;
+    /** Добавка за каждого участника сверх первого. */
+    public int claimsPerMember = 0;
+    public int forcePerMember = 0;
+    public BonusMode bonusMode = BonusMode.LARGEST;
+    /** Потолки лимита команды; 0: без потолка. */
+    public int hardClaims = 0;
+    public int hardForce = 0;
+
+    // ---- земля ----
+    /** Измерения без привата; {@code мод:*} закрывает все измерения мода. */
+    public Set<String> disabledDimensions = new LinkedHashSet<>(List.of("ae2:spatial_storage", "neovitae:dungeon"));
+    /** Приват только в этих измерениях; пусто: везде, кроме закрытых. */
+    public Set<String> onlyDimensions = new LinkedHashSet<>();
+    /** Новый чанк только рядом со своим (по стороне) или первым в измерении. */
+    public boolean adjacentOnly = false;
+    /** Сколько секунд освобождаемый чанк ещё защищён. */
+    public int releaseSeconds = 30;
+    /** Самая щедрая прогрузка, которую может выбрать команда. */
+    public LoadMode maxLoad = LoadMode.ONLINE;
+
+    // ---- доступ ----
+    public boolean protection = true;
+    public AllyMode allyMode = AllyMode.TEAM;
+    public PvpMode pvpMode = PvpMode.ALWAYS;
+    /** Свободная земля: строить нельзя (везде или в списке измерений). */
+    public boolean noWilderness = false;
+    public Set<String> noWildernessDimensions = new LinkedHashSet<>();
+    /** Могут ли команды менять свои права и переключатели. */
+    public boolean teamsEditRights = true;
+    /** Права новой команды. */
+    public Rights defaultRights = defaultRights();
+
+    public static Rights defaultRights() {
+        Rights r = Rights.of(Rights.Preset.TEAM);
+        r.set(Rights.Action.OPEN, Rights.Preset.TEAM_AND_ALLIES);
+        r.set(Rights.Action.USE, Rights.Preset.TEAM_AND_ALLIES);
+        return r;
+    }
+
+    /** Разрешён ли приват в измерении. */
+    public boolean claimable(String dimension) {
+        if (matches(disabledDimensions, dimension)) return false;
+        return onlyDimensions.isEmpty() || matches(onlyDimensions, dimension);
+    }
+
+    /** Закрыта ли свободная земля в измерении. */
+    public boolean wildernessClosed(String dimension) {
+        if (!noWildernessDimensions.isEmpty()) return matches(noWildernessDimensions, dimension);
+        return noWilderness;
+    }
+
+    static boolean matches(Set<String> list, String dimension) {
+        if (list.contains(dimension)) return true;
+        int colon = dimension.indexOf(':');
+        return colon > 0 && list.contains(dimension.substring(0, colon) + ":*");
+    }
+}

@@ -1,0 +1,6 @@
+{
+	max_claim_chunks: 510
+	max_force_load_chunks: 25
+	extra_claim_chunks: 10
+	chunks: { }
+}
