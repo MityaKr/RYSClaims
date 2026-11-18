@@ -55,6 +55,16 @@ class BordersTest {
     }
 
     @Test
+    void hoppersMayFeedFromWilderness() {
+        assertTrue(service.mayInsert(OW, wild, a, false), "со свободной земли на землю команды можно");
+        assertTrue(service.mayInsert(OW, a, wild, false), "на свободную землю можно");
+        assertTrue(service.mayInsert(OW, a, a2, false), "своя земля");
+        assertFalse(service.mayInsert(OW, a2, b, false), "между командами нельзя");
+        assertFalse(service.mayInsert(OW, b, a2, false), "и обратно нельзя");
+        assertTrue(service.mayInsert(OW, a2, b, true), "настройка сервера разрешает");
+    }
+
+    @Test
     void ownerlessExplosionBySetting() {
         assertTrue(service.ownerlessExplosion(OW, a, wild), "свободная земля");
         assertFalse(service.ownerlessExplosion(OW, a, a2), "своя земля без переключателя");

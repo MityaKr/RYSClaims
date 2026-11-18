@@ -19,7 +19,7 @@ abstract class DispenserMixin {
     @Inject(method = "dispenseFrom", at = @At("HEAD"), cancellable = true)
     private void rysclaims$border(ServerLevel level, BlockState state, BlockPos pos, CallbackInfo ci) {
         if (!state.hasProperty(DispenserBlock.FACING)) return;
-        if (!Borders.hopper(level, pos, pos.relative(state.getValue(DispenserBlock.FACING)))) {
+        if (!Borders.dispenser(level, pos, pos.relative(state.getValue(DispenserBlock.FACING)))) {
             level.levelEvent(1001, pos, 0);
             ci.cancel();
         }

@@ -39,8 +39,25 @@ public final class Borders {
         return cross(s, level, from, to, s.settings().fireCross);
     }
 
-    /** Воронка, выбрасыватель, раздатчик из {@code from} в {@code to}: на землю другой команды только с настройкой сервера. */
+    /**
+     * Воронка и выбрасыватель из {@code from} в {@code to}: на землю другой команды только с настройкой сервера; со свободной
+     * земли можно ({@link ClaimService#mayInsert}).
+     */
     public static boolean hopper(Level level, BlockPos from, BlockPos to) {
+        if (((from.getX() ^ to.getX()) >> 4) == 0 && ((from.getZ() ^ to.getZ()) >> 4) == 0) return true;
+        ClaimService s = service(level);
+        if (s == null) return true;
+        String dim = Loader.id(level.dimension());
+        if (!s.data().anyIn(dim)) return true;
+        BlockPos wf = SableLand.toWorld(level, from), wt = SableLand.toWorld(level, to);
+        return s.mayInsert(dim, Chunks.pack(wf.getX() >> 4, wf.getZ() >> 4), Chunks.pack(wt.getX() >> 4, wt.getZ() >> 4), s.settings().hoppersCross);
+    }
+
+    /**
+     * Раздатчик из {@code from} в {@code to}: на землю другой команды и со свободной земли на землю команды только с
+     * настройкой воронок. Раздатчик льёт лаву, ставит блоки и огонь, поэтому со свободной земли закрыт, в отличие от воронки.
+     */
+    public static boolean dispenser(Level level, BlockPos from, BlockPos to) {
         if (((from.getX() ^ to.getX()) >> 4) == 0 && ((from.getZ() ^ to.getZ()) >> 4) == 0) return true;
         ClaimService s = service(level);
         if (s == null) return true;

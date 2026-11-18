@@ -63,7 +63,7 @@ public final class CrossGameTests {
         return level.getBlockEntity(pos) instanceof ChestBlockEntity c && c.isEmpty();
     }
 
-    /** Воронка у границы не кладёт в сундук на земле другой команды; когда воронка на той же земле, кладёт. */
+    /** Воронка у границы не кладёт в сундук на земле другой команды; со свободной земли и со своей земли кладёт. */
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void hopperAcrossBorder(GameTestHelper h) {
         ServerLevel level = h.getLevel();
@@ -77,11 +77,17 @@ public final class CrossGameTests {
             level.setBlock(hopper, hs, 3);
             HopperBlockEntity be = (HopperBlockEntity) level.getBlockEntity(hopper);
             be.setItem(0, new ItemStack(Items.COBBLESTONE, 4));
+            claim(level, UUID.randomUUID(), hopper);
             HopperBlockEntity.pushItemsTick(level, hopper, hs, be);
-            if (!chestEmpty(level, chest)) h.fail("воронка со свободной земли положила в сундук команды");
+            if (!chestEmpty(level, chest)) h.fail("воронка с земли другой команды положила в сундук команды");
+            free(level, hopper);
+            be.setCooldown(0);
+            HopperBlockEntity.pushItemsTick(level, hopper, hs, be);
+            if (chestEmpty(level, chest)) h.fail("воронка со свободной земли не кладёт в сундук команды");
             claim(level, team, hopper);
+            be.setCooldown(0);
             HopperBlockEntity.pushItemsTick(level, hopper, hs, be);
-            if (chestEmpty(level, chest)) h.fail("воронка на своей земле не кладёт в свой сундук через границу чанков");
+            if (be.getItem(0).getCount() > 2) h.fail("воронка на своей земле не кладёт в свой сундук через границу чанков");
         } finally {
             level.removeBlock(hopper, false);
             level.removeBlock(chest, false);
@@ -104,8 +110,12 @@ public final class CrossGameTests {
             BlockState ds = Blocks.DROPPER.defaultBlockState().setValue(DispenserBlock.FACING, Direction.EAST);
             level.setBlock(dropper, ds, 3);
             ((DispenserBlockEntity) level.getBlockEntity(dropper)).setItem(0, new ItemStack(Items.COBBLESTONE, 4));
+            claim(level, UUID.randomUUID(), dropper);
             ds.tick(level, dropper, level.random);
-            if (!chestEmpty(level, chest)) h.fail("выбрасыватель со свободной земли положил в сундук команды");
+            if (!chestEmpty(level, chest)) h.fail("выбрасыватель с земли другой команды положил в сундук команды");
+            free(level, dropper);
+            ds.tick(level, dropper, level.random);
+            if (chestEmpty(level, chest)) h.fail("выбрасыватель со свободной земли не кладёт в сундук команды");
 
             BlockState ps = Blocks.DISPENSER.defaultBlockState().setValue(DispenserBlock.FACING, Direction.EAST);
             level.setBlock(dispenser, ps, 3);
@@ -114,8 +124,9 @@ public final class CrossGameTests {
             if (level.getBlockState(target).is(Blocks.SHULKER_BOX)) h.fail("раздатчик со свободной земли поставил блок на землю команды");
 
             claim(level, team, dropper, dispenser);
+            int before = ((DispenserBlockEntity) level.getBlockEntity(dropper)).getItem(0).getCount();
             ds.tick(level, dropper, level.random);
-            if (chestEmpty(level, chest)) h.fail("выбрасыватель на своей земле не кладёт в свой сундук");
+            if (((DispenserBlockEntity) level.getBlockEntity(dropper)).getItem(0).getCount() >= before) h.fail("выбрасыватель на своей земле не кладёт в свой сундук");
             ps.tick(level, dispenser, level.random);
             if (!level.getBlockState(target).is(Blocks.SHULKER_BOX)) h.fail("раздатчик на своей земле не ставит блок рядом");
         } finally {

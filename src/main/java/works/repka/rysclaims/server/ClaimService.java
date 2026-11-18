@@ -715,6 +715,19 @@ public final class ClaimService {
     }
 
     /**
+     * Предмет из {@code from} в {@code to} (воронка, выбрасыватель): как {@link #mayCross}, но со свободной земли можно и на
+     * землю команды (разбор скептика 18.11, риск 8): цепочка воронок от фермы на свободной земле к своей базе не встаёт
+     * молча. Положить предмет в чужой сундук не опаснее, чем бросить его рядом; между землями разных команд закрыто.
+     */
+    public boolean mayInsert(String dim, long from, long to, boolean allowed) {
+        if (from == to || allowed || !settings.get().protection) return true;
+        UUID target = data.owner(dim, to);
+        if (target == null) return true;
+        UUID source = data.owner(dim, from);
+        return source == null || target.equals(source);
+    }
+
+    /**
      * Взрыв без хозяина ломает блок чанка {@code chunk}, если его центр в чанке {@code center}: ничья земля всегда; иначе по
      * настройке сервера, при «свои» только земля той же команды, что центр, и с переключателем «Свои взрывы ломают блоки».
      */
