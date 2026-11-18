@@ -91,6 +91,8 @@
   "rysclaims.skip.releasing": "being released",
   "rysclaims.skipped": "Skipped %s (%s)",
   "rysclaims.team.legacy": "FTB team \"%s\"",
+  "rysclaims.toast.foreign": "Land of %s",
+  "rysclaims.toast.hidden": "This land is taken",
   "rysclaims.trust.off": "No longer trusted: %s",
   "rysclaims.trust.on": "Trusted: %s",
   "rysclaims.yes": "yes"

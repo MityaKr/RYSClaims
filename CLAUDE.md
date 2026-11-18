@@ -19,7 +19,7 @@
 * `server/ClaimsServer`: жизнь на сервере (ServerStarting, высокий приоритет, раньше переезда ядра в ServerStarted), тик, вход.
 * `server/Protection`: защита событиями NeoForge, первым делом дешёвый выход (в измерении нет земли). Фейковый игрок судится `machineNames`, профилем и «Машины снаружи», его позиции не верим (R0, пункт 0.1). Порча блоков мобами судится только у монстров (`Enemy`): иначе на базе встали бы овцы, жители и големы.
 * `server/Borders`: жидкость, огонь, молния через границу (зовут перехваты `mixin/`); сначала номера чанков, поиск только на границе.
-* `server/DenyLog`: журнал отказов в памяти и файлах `world/rysclaims/log`, запись раз в минуту в своём потоке. `net/ClaimsNet`: пакет `Denied` (необязательный канал), `client/DenyFeedback` показывает причину.
+* `server/DenyLog`: журнал отказов в памяти и файлах `world/rysclaims/log`, запись раз в минуту в своём потоке. `net/ClaimsNet`: пакет `Denied` (необязательный канал), `client/DenyFeedback` показывает замок и причину у прицела и тост раз на землю (`client/ClaimsClient` регистрирует слой).
 * `mixin/`: перехваты игры там, где событий нет (`rysclaims.mixins.json`, `defaultRequire = 1`: сломанный перехват роняет GameTest).
 * `mixin/compat`: перехваты машин чужих модов (`@Pseudo`, строки целей, необязательный набор `rysclaims.compat.mixins.json`, `CompatPlugin` включает класс по префиксу имени, только если мод загружен). Сигнатуры сверены `javap` с jar сервера RepYS. `server/Machines`: решение по месту блок-сущности и журнал.
 * `compat/sable/SableLand`: позиция участка Sable в мировую и дом постройки (компаньон отражением, сначала проверка сетки `Chunks.sablePlot`); `SableAssembly` + `mixin/compat/SableAssemblyMixin`: фильтр блоков сборки и запись дома в `ClaimData.homes`.

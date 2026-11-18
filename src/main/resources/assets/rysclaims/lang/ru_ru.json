@@ -91,6 +91,8 @@
   "rysclaims.skip.releasing": "освобождается",
   "rysclaims.skipped": "Пропущено %s (%s)",
   "rysclaims.team.legacy": "команды FTB «%s»",
+  "rysclaims.toast.foreign": "Чужая земля: %s",
+  "rysclaims.toast.hidden": "Эта земля занята",
   "rysclaims.trust.off": "Больше не доверенные: %s",
   "rysclaims.trust.on": "Доверенные: %s",
   "rysclaims.yes": "да"
