@@ -68,6 +68,8 @@ public final class ClaimsServer {
         ClaimData d = saved == null ? null : saved.data();
         if (d != null) d.listen(null);
         ClaimSync.clear();
+        Alerts.clear();
+        Feed.clear();
         server = null;
         saved = null;
         service = null;
@@ -101,9 +103,13 @@ public final class ClaimsServer {
         if (ticks % 20 == 0) s.tick();
         DenyLog l = log;
         if (l != null) {
-            if (ticks % LOG_FLUSH_TICKS == 0) l.flush();
+            if (ticks % LOG_FLUSH_TICKS == 0) {
+                l.flush();
+                Alerts.flush(s);
+            }
             if (ticks % LOG_PRUNE_TICKS == 0) l.prune(s.settings().logDays);
         }
+        if (ticks % 200 == 0) Feed.flush(srv);
         if (loaderDirty || ticks % 200 == 0) {
             loaderDirty = false;
             Loader.sync(srv, s);
@@ -162,6 +168,11 @@ public final class ClaimsServer {
         @Override
         public void landChanged(UUID team) {
             ClaimSync.landChanged(team);
+        }
+
+        @Override
+        public void landEdited(UUID actor, UUID team, String op, int count) {
+            Feed.edited(actor, team, op, count);
         }
 
         @Override

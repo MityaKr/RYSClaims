@@ -40,6 +40,18 @@ public final class DenyFeedback {
         toast(reason, owner);
     }
 
+    /**
+     * Хозяевам (макет {@code 06b}): «На земле команды чужой: Grib_ok» и что он пытался, где. Сервер шлёт не чаще раза в 5
+     * минут на одного чужого и только если команда включила тост в журнале.
+     */
+    public static void ownerAlert(String name, String reason, String plot) {
+        String what = Component.translatableWithFallback("rysclaims.alert.reason." + reason, reason).getString();
+        String note = plot.isEmpty() ? what : Component.translatableWithFallback("rysclaims.alert.at", "%s · %s", what,
+            plot.startsWith("#") ? Words.t("plot.unnamed", plot.substring(1)) : plot).getString();
+        Notices.show(Notice.card(Notice.CLAIMS, "owner_alert").icon(Icons.Shape.SHIELD)
+            .title(Component.translatableWithFallback("rysclaims.alert.title", "Stranger on team land: %s", name).getString()).note(note));
+    }
+
     public static Component text(String reason) {
         return Component.translatableWithFallback("rysclaims.deny." + reason, "You cannot do this here");
     }

@@ -330,6 +330,84 @@ public final class ClaimsNet {
         }
     }
 
+    /** Хозяевам в сети: чужой пытался что-то на земле команды (тост {@code 06b}). */
+    public record OwnerAlert(String name, String reason, String plot) implements CustomPacketPayload {
+        public static final Type<OwnerAlert> TYPE = new Type<>(ClaimsNet.id("owner_alert"));
+        public static final StreamCodec<ByteBuf, OwnerAlert> CODEC = StreamCodec.composite(
+            ByteBufCodecs.stringUtf8(64), OwnerAlert::name, ByteBufCodecs.stringUtf8(32), OwnerAlert::reason,
+            ByteBufCodecs.stringUtf8(64), OwnerAlert::plot, OwnerAlert::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Строка журнала отказов: когда (последний и первый раз), сколько раз, кто, машина ли, почему, где, участок. */
+    public record LogLine(long last, long first, int count, String name, boolean machine, String reason, String dim, int x, int y, int z, String plot) {
+        static LogLine read(FriendlyByteBuf b) {
+            return new LogLine(b.readVarLong(), b.readVarLong(), b.readVarInt(), b.readUtf(64), b.readBoolean(), b.readUtf(32), ClaimsNet.dim(b),
+                b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readUtf(64));
+        }
+
+        void write(FriendlyByteBuf b) {
+            b.writeVarLong(last);
+            b.writeVarLong(first);
+            b.writeVarInt(count);
+            b.writeUtf(name.length() > 64 ? name.substring(0, 64) : name, 64);
+            b.writeBoolean(machine);
+            b.writeUtf(reason, 32);
+            b.writeUtf(dim, 128);
+            b.writeVarInt(x);
+            b.writeVarInt(y);
+            b.writeVarInt(z);
+            b.writeUtf(plot.length() > 64 ? plot.substring(0, 64) : plot, 64);
+        }
+    }
+
+    /** Журнал своей земли (макет {@code 43}): настройки ленты и тоста, можно ли их править, срок хранения, последние строки. */
+    public record LogPage(boolean feed, boolean toast, boolean canEdit, int days, List<LogLine> lines) implements CustomPacketPayload {
+        public static final Type<LogPage> TYPE = new Type<>(ClaimsNet.id("log_page"));
+        public static final StreamCodec<FriendlyByteBuf, LogPage> CODEC = CustomPacketPayload.codec(LogPage::write, LogPage::read);
+        public static final int MAX = 200;
+
+        private static LogPage read(FriendlyByteBuf b) {
+            boolean feed = b.readBoolean(), toast = b.readBoolean(), edit = b.readBoolean();
+            int days = b.readVarInt(), n = b.readVarInt();
+            if (n < 0 || n > MAX) throw new DecoderException("слишком длинный журнал: " + n);
+            List<LogLine> lines = new ArrayList<>(n);
+            for (int i = 0; i < n; i++) lines.add(LogLine.read(b));
+            return new LogPage(feed, toast, edit, days, lines);
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeBoolean(feed);
+            b.writeBoolean(toast);
+            b.writeBoolean(canEdit);
+            b.writeVarInt(days);
+            int n = Math.min(lines.size(), MAX);
+            b.writeVarInt(n);
+            for (int i = 0; i < n; i++) lines.get(i).write(b);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Окно просит журнал своей земли. */
+    public record LogRequest() implements CustomPacketPayload {
+        public static final LogRequest INSTANCE = new LogRequest();
+        public static final Type<LogRequest> TYPE = new Type<>(ClaimsNet.id("log_request"));
+        public static final StreamCodec<FriendlyByteBuf, LogRequest> CODEC = StreamCodec.unit(INSTANCE);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     // ---- серверу ----
 
     /** Подписка: измерение и регионы (упакованы как чанк). Больше {@link #MAX_REGIONS} сервер не держит. */
@@ -387,7 +465,7 @@ public final class ClaimsNet {
         }
     }
 
-    public static final int RIGHTS_CELL = 0, RIGHTS_PRESET = 1, RIGHTS_TABLE = 2;
+    public static final int RIGHTS_CELL = 0, RIGHTS_PRESET = 1, RIGHTS_TABLE = 2, RIGHTS_ROLE = 3;
 
     /**
      * Правка прав доступа своей команды: клетка окна ({@code action}, {@code column} по {@code Rights.Column}, {@code on}),
@@ -416,7 +494,7 @@ public final class ClaimsNet {
     }
 
     public static final int LAND_TRUST = 0, LAND_UNTRUST = 1, LAND_FLAG = 2, LAND_VISIBILITY = 3, LAND_RENAME = 4, LAND_UNLOAD_PLOT = 5,
-        LAND_RELEASE_PLOT = 6;
+        LAND_RELEASE_PLOT = 6, LAND_LOG_FEED = 7, LAND_LOG_TOAST = 8;
     /** Итог {@link LandEdit} приходит {@link EditResult} с действием {@code OP_LAND + kind}. */
     public static final int OP_LAND = 10;
 
@@ -457,11 +535,14 @@ public final class ClaimsNet {
         r.playToClient(Access.TYPE, Access.CODEC, (p, c) -> client(() -> Client.access(p)));
         r.playToClient(EditResult.TYPE, EditResult.CODEC, (p, c) -> client(() -> Client.result(p)));
         r.playToClient(LandState.TYPE, LandState.CODEC, (p, c) -> client(() -> Client.state(p)));
+        r.playToClient(OwnerAlert.TYPE, OwnerAlert.CODEC, (p, c) -> client(() -> Client.alert(p)));
+        r.playToClient(LogPage.TYPE, LogPage.CODEC, (p, c) -> client(() -> Client.log(p)));
         r.playToServer(Subscribe.TYPE, Subscribe.CODEC, (p, c) -> server(c, pl -> ClaimSync.subscribe(pl, p)));
         r.playToServer(Edit.TYPE, Edit.CODEC, (p, c) -> server(c, pl -> ClaimSync.edit(pl, p)));
         r.playToServer(Keep.TYPE, Keep.CODEC, (p, c) -> server(c, ClaimSync::keep));
         r.playToServer(RightsEdit.TYPE, RightsEdit.CODEC, (p, c) -> server(c, pl -> ClaimSync.rights(pl, p)));
         r.playToServer(LandEdit.TYPE, LandEdit.CODEC, (p, c) -> server(c, pl -> ClaimSync.land(pl, p)));
+        r.playToServer(LogRequest.TYPE, LogRequest.CODEC, (p, c) -> server(c, ClaimSync::log));
     }
 
     private static void client(Runnable r) {
@@ -500,6 +581,14 @@ public final class ClaimsNet {
 
         static void state(LandState s) {
             works.repka.rysclaims.client.LandCache.state(s);
+        }
+
+        static void alert(OwnerAlert a) {
+            works.repka.rysclaims.client.DenyFeedback.ownerAlert(a.name(), a.reason(), a.plot());
+        }
+
+        static void log(LogPage p) {
+            works.repka.rysclaims.client.LandCache.log(p);
         }
     }
 

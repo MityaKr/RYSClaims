@@ -32,6 +32,19 @@ public final class ClaimsClient {
 
     private ClaimsClient() {}
 
+    private static works.repka.ryscore.team.TeamCards.@org.jetbrains.annotations.Nullable Detailed card() {
+        works.repka.rysclaims.net.ClaimsNet.Hello h = LandCache.hello();
+        if (h == null) return null;
+        java.util.List<Component> lines = java.util.List.of(
+            Component.translatable("rysclaims.card.claims", h.claimed(), h.claimLimit()),
+            Component.translatable("rysclaims.card.force", h.forced(), h.forceLimit()));
+        var st = LandCache.state();
+        Component tag = st == null || st.plots().isEmpty() ? null : Component.literal(Words.plural(st.plots().size(), "plots"));
+        var card = new works.repka.ryscore.team.TeamCards.Card(works.repka.rysclaims.server.Feed.SOURCE, Component.translatable("rysclaims.card.title"),
+            lines, Component.translatable("rysclaims.card.open"), LandScreen::open, h.claimed() > h.claimLimit());
+        return new works.repka.ryscore.team.TeamCards.Detailed(card, tag, h.claimLimit() <= 0 ? -1f : Math.min(1f, h.claimed() / (float) h.claimLimit()));
+    }
+
     public static void init(IEventBus modBus) {
         modBus.addListener((RegisterGuiLayersEvent e) ->
             e.registerAbove(VanillaGuiLayers.CROSSHAIR, ResourceLocation.fromNamespaceAndPath(RYSClaims.MODID, "deny"), DenyFeedback::render));
@@ -43,6 +56,8 @@ public final class ClaimsClient {
             .label(Component.translatable("rysclaims.dock")).description(() -> Component.translatable("rysclaims.dock.description"))
             .tile(0xFFD9714F).icon(Icons.Shape.SHIELD).key(OPEN).order(21).action(LandScreen::open).register()));
         LandLayer.register();
+        // сводка «Земля» на экране команды RYSTeams (план, раздел 8, строка «Экран команды»)
+        works.repka.ryscore.team.TeamCards.registerDetailed(ClaimsClient::card);
         var bus = NeoForge.EVENT_BUS;
         bus.addListener(InputGate::onInput);
         bus.addListener((ClientPlayerNetworkEvent.LoggingOut e) -> {

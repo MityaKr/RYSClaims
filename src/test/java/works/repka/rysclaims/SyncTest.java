@@ -127,4 +127,22 @@ class SyncTest {
         d.clear();
         assertEquals(1, all[0]);
     }
+
+    /** З10: столбцы по ролям монотонны; снятая роль снимает «Союзников» и «Всех», но остальные роли остаются, как их видно. */
+    @Test
+    void roleColumns() {
+        Rights r = Rights.of(Rights.Preset.TEAM_AND_ALLIES);
+        assertTrue(r.shownRole(Rights.Action.BUILD, Rights.GUEST), "гость открыт через союзников");
+        r.toggleRole(Rights.Action.BUILD, Rights.OFFICER, false);
+        assertFalse(r.shownRole(Rights.Action.BUILD, Rights.OFFICER));
+        assertFalse(r.shownRole(Rights.Action.BUILD, Rights.ALLIES), "снятая роль снимает союзников");
+        assertTrue(r.shownRole(Rights.Action.BUILD, Rights.GUEST), "гость остался, каким его было видно");
+        assertTrue(r.shownRole(Rights.Action.BUILD, Rights.MEMBER));
+        r.toggleRole(Rights.Action.BUILD, Rights.ALL, true);
+        for (String c : Rights.COLUMNS) assertTrue(r.shownRole(Rights.Action.BUILD, c), c);
+        r.toggleRole(Rights.Action.BUILD, Rights.LEADER, false);
+        assertTrue(r.shownRole(Rights.Action.BUILD, Rights.LEADER), "лидера не снять");
+        Rights back = Rights.fromBits(r.bits());
+        assertEquals(r, back);
+    }
 }

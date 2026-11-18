@@ -206,6 +206,7 @@ public final class Protection {
         if (owner != null) {
             DenyLog log = ClaimsServer.log();
             if (log != null) log.add(owner, player.getUUID(), player.getGameProfile().getName(), fake, reason, dim, world.getX(), world.getY(), world.getZ());
+            if (!fake) Alerts.denied(s, owner, player.getUUID(), player.getGameProfile().getName(), reason, dim, world);
         }
         if (!fake && player instanceof ServerPlayer sp) feedback(s, sp, reason, owner);
     }
@@ -245,6 +246,7 @@ public final class Protection {
             case GUEST -> "Guests do not build here";
             case WILDERNESS -> "You can build only on your land";
             case MACHINE -> "Machines are not allowed here";
+            case EXPLOSION -> "Explosions do not break blocks here";
         };
     }
 
@@ -418,13 +420,27 @@ public final class Protection {
         BlockPos cpos = SableLand.toWorld(level, BlockPos.containing(ex.center()));
         long center = Chunks.pack(cpos.getX() >> 4, cpos.getZ() >> 4);
         Map<Long, Boolean> byChunk = new HashMap<>();
+        Map<UUID, BlockPos> saved = new HashMap<>();
         Iterator<BlockPos> it = e.getAffectedBlocks().iterator();
         while (it.hasNext()) {
             BlockPos pos = it.next();
             BlockPos w = SableLand.toWorld(level, pos);
             long chunk = Chunks.pack(w.getX() >> 4, w.getZ() >> 4);
             boolean ok = byChunk.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, center, Rights.Action.BUILD));
-            if (!ok) it.remove();
+            if (!ok) {
+                it.remove();
+                UUID owner = s.data().owner(dim, chunk);
+                if (owner != null) saved.putIfAbsent(owner, w);
+            }
+        }
+        // журнал хозяев: «Взрыв крипера не тронул блоки» (план, макет 43)
+        DenyLog log = ClaimsServer.log();
+        if (log != null && !saved.isEmpty()) {
+            String name = player != null ? player.getGameProfile().getName()
+                : direct != null ? net.minecraft.world.entity.EntityType.getKey(direct.getType()).toString()
+                : indirect != null ? net.minecraft.world.entity.EntityType.getKey(indirect.getType()).toString() : "";
+            UUID actor = player == null ? null : player.getUUID();
+            saved.forEach((owner, w) -> log.add(owner, actor, name, false, ClaimService.Reason.EXPLOSION, dim, w.getX(), w.getY(), w.getZ()));
         }
         Map<Long, Boolean> byChunkEntity = new HashMap<>();
         Iterator<Entity> ents = e.getAffectedEntities().iterator();

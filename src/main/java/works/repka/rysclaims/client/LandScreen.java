@@ -60,7 +60,7 @@ public final class LandScreen extends ScaledScreen {
     private static final long RESULT_MS = 6000, UNDO_MS = 30_000;
     private static final int SHIELD_TILE = 0xFFD9714F;
 
-    enum Page { GRID, PLOTS, RIGHTS }
+    enum Page { GRID, PLOTS, RIGHTS, LOG }
 
     enum Tool { CLAIM, FORCE, RELEASE }
 
@@ -199,6 +199,7 @@ public final class LandScreen extends ScaledScreen {
             }
             case PLOTS -> plots(g, t, h, mx, my);
             case RIGHTS -> rights(g, t, h, mx, my);
+            case LOG -> journal(g, t, h, mx, my);
         }
         boolean lists = presetDrop.open || dimDrop.open || visDrop.open || menuOpen();
         if (tip != null && !lists && dialog == null) Kit.tooltip(g, t, tip, mx, my);
@@ -232,8 +233,9 @@ public final class LandScreen extends ScaledScreen {
         ClaimsNet.LandState st = LandCache.state();
         int plotsN = st == null ? 0 : st.plots().size();
         Page[] pages = Page.values();
+        int day = lastDay(LandCache.log());
         String[] labels = {Words.t("screen.page.grid"), plotsN > 0 ? Words.t("screen.page.plots.n", plotsN) : Words.t("screen.page.plots"),
-            Words.t("screen.page.rights")};
+            Words.t("screen.page.rights"), day > 0 ? Words.t("screen.page.log.n", day) : Words.t("screen.page.log")};
         float sum = 0;
         for (String l : labels) sum += Draw.labelWidth(l, 12.5f, Weight.MEDIUM);
         int w = (int) Math.ceil(sum) + 12 * labels.length + 2 * (labels.length - 1) + 4;
@@ -420,7 +422,7 @@ public final class LandScreen extends ScaledScreen {
     private void label(GuiGraphics g, Theme canvas, UUID team, long chunk, ClaimsNet.Hello h) {
         LandCache.TeamInfo info = LandCache.team(team);
         if (info == null) return;
-        String name = Draw.ellipsize(info.name(), 90, 11.5f, Weight.SEMIBOLD);
+        String name = Draw.ellipsize(info.name().isEmpty() ? Words.t("screen.taken") : info.name(), 90, 11.5f, Weight.SEMIBOLD);
         float tw = Draw.labelWidth(name, 11.5f, Weight.SEMIBOLD);
         float w = 4 + 4 + 3 + tw + 4, hh = 9;
         float x = (float) screenX(Chunks.x(chunk) * 16);
@@ -902,14 +904,18 @@ public final class LandScreen extends ScaledScreen {
         if (edit) Kit.dropdown(g, t, hits, presetDrop, dx, wy + HEADER + 6, dropW, label, false, mx, my);
         else Draw.label(g, label, dx + 5, wy + HEADER + 13, 12.5f, Weight.REGULAR, t.c("text.secondary"));
 
-        // таблица
-        int nameW = 250, colW = 72, rowH = 19;
-        int tableW = nameW + colW * 3;
-        String[][] cols = h.solo()
-            ? new String[][] {{Words.t("col.you"), playerName()}, {Words.t("col.trusted"), Words.plural(h.trusted(), "players")}, {Words.t("col.all"), Words.t("col.all.note")}}
-            : new String[][] {{Words.t("col.team"), Words.plural(h.members(), "players")}, {Words.t("col.allies"), Words.t("col.allies.note")}, {Words.t("col.all"), Words.t("col.all.note")}};
-        for (int i = 0; i < 3; i++) {
+        // таблица: у одиночки «Ты, Доверенные, Все», у команды столбцы по ролям (макет 41)
+        boolean roles = !h.solo();
+        int ncol = roles ? Rights.COLUMNS.size() : 3;
+        int nameW = roles ? 206 : 250, colW = roles ? 60 : 72, rowH = 19;
+        int tableW = nameW + colW * ncol;
+        String[][] cols = roles
+            ? new String[][] {{Words.t("col.leader"), ""}, {Words.t("col.officer"), ""}, {Words.t("col.member"), ""}, {Words.t("col.guest"), ""},
+                {Words.t("col.allies"), Words.t("col.allies.note")}, {Words.t("col.all"), Words.t("col.all.note")}}
+            : new String[][] {{Words.t("col.you"), playerName()}, {Words.t("col.trusted"), Words.plural(h.trusted(), "players")}, {Words.t("col.all"), Words.t("col.all.note")}};
+        for (int i = 0; i < ncol; i++) {
             float ccx = x + nameW + colW * i + colW / 2f;
+            if (roles && i >= 4) Draw.rect(g, (int) (x + nameW + colW * i), top, colW, 20 + rowH * 4, Draw.alpha(t.c("sidebar.bg"), 0.6f));
             float tw = Draw.labelWidth(cols[i][0], 12.5f, Weight.SEMIBOLD);
             Draw.label(g, cols[i][0], ccx - tw / 2f, top + 6, 12.5f, Weight.SEMIBOLD, t.c("text.primary"));
             String sub = Draw.ellipsize(cols[i][1], colW - 4, 11, Weight.REGULAR);
@@ -926,13 +932,21 @@ public final class LandScreen extends ScaledScreen {
             Icons.draw(g, icons[i], x + 3.5f, y + 6.5f, 8, t.c("text.secondary"));
             Draw.label(g, Words.t("right." + a.key()), x + 20, y + 6.5f, 12.5f, Weight.REGULAR, t.c("text.primary"));
             Draw.label(g, Draw.ellipsize(Words.t("right." + a.key() + ".note"), nameW - 24, 11, Weight.REGULAR), x + 20, y + 13.5f, 11, Weight.REGULAR, t.c("text.muted"));
-            for (int c = 0; c < 3; c++) {
-                Rights.Column col = Rights.Column.values()[c];
+            for (int c = 0; c < ncol; c++) {
                 int bx = (int) (x + nameW + colW * c + colW / 2f - 4.5f), by = y + 5;
-                boolean on = r.shown(a, col);
-                // у одиночки первый столбец это он сам (лидер): ему можно всё
-                Runnable toggle = !edit || (h.solo() && col == Rights.Column.TEAM) ? null : () -> cell(h, a, col, !on);
-                Kit.checkbox(g, t, hits, bx, by, h.solo() && col == Rights.Column.TEAM || on, mx, my, toggle);
+                if (roles) {
+                    String col = Rights.COLUMNS.get(c);
+                    boolean on = r.shownRole(a, col);
+                    // лидеру на своей земле можно всё: клетка отмечена и не нажимается
+                    Runnable toggle = !edit || Rights.LEADER.equals(col) ? null : () -> roleCell(h, a, col, !on);
+                    Kit.checkbox(g, t, hits, bx, by, on, mx, my, toggle);
+                } else {
+                    Rights.Column col = Rights.Column.values()[c];
+                    boolean on = r.shown(a, col);
+                    // у одиночки первый столбец это он сам (лидер): ему можно всё
+                    Runnable toggle = !edit || col == Rights.Column.TEAM ? null : () -> cell(h, a, col, !on);
+                    Kit.checkbox(g, t, hits, bx, by, col == Rights.Column.TEAM || on, mx, my, toggle);
+                }
             }
             y += rowH;
         }
@@ -1018,6 +1032,17 @@ public final class LandScreen extends ScaledScreen {
         LandCache.clearResult();
         LandCache.editedAccess();
         LandCache.send(new ClaimsNet.RightsEdit(ClaimsNet.RIGHTS_CELL, a.ordinal(), c.ordinal(), on, 0));
+    }
+
+    private void roleCell(ClaimsNet.Hello h, Rights.Action a, String column, boolean on) {
+        int now = askedBits >= 0 ? askedBits : h.rights();
+        remember(h, now);
+        Rights r = Rights.fromBits(now);
+        r.toggleRole(a, column, on);
+        askedBits = r.bits();
+        LandCache.clearResult();
+        LandCache.editedAccess();
+        LandCache.send(new ClaimsNet.RightsEdit(ClaimsNet.RIGHTS_ROLE, a.ordinal(), Rights.COLUMNS.indexOf(column), on, 0));
     }
 
     private void presetEdit(ClaimsNet.Hello h, Rights.Preset p) {
@@ -1181,10 +1206,23 @@ public final class LandScreen extends ScaledScreen {
     private void plots(GuiGraphics g, Theme t, ClaimsNet.Hello h, int mx, int my) {
         int x = wx + 12, w = ww - 24, top = wy + HEADER + BAR + 4;
         List<ClaimsNet.PlotInfo> list = sortedPlots();
-        // сводка: две карточки
-        int cw2 = (w - 6) / 2;
-        summary(g, t, x, top, cw2, Icons.Shape.SHIELD, Words.t("plots.card.claims"), h.claimed(), Words.t("plots.of_chunks", h.claimLimit()), h.claimLimit());
-        summary(g, t, x + cw2 + 6, top, w - cw2 - 6, Icons.Shape.ANCHOR, Words.t("plots.card.force"), h.forced(), Words.t("plots.of_chunks", h.forceLimit()), h.forceLimit());
+        // сводка: три карточки (макет 40)
+        LandCache.wantLog(30_000);
+        int cw3 = (w - 12) / 3;
+        summary(g, t, x, top, cw3, Icons.Shape.SHIELD, Words.t("plots.card.claims"), h.claimed(), Words.t("plots.of_chunks", h.claimLimit()), h.claimLimit());
+        summary(g, t, x + cw3 + 6, top, cw3, Icons.Shape.ANCHOR, Words.t("plots.card.force"), h.forced(), Words.t("plots.of_chunks", h.forceLimit()), h.forceLimit());
+        int dx3 = x + 2 * (cw3 + 6), dw3 = w - 2 * (cw3 + 6), day = lastDay(LandCache.log());
+        Draw.roundBox(g, dx3, top, dw3, 38, 6, t.c("card.bg"), t.c("card.border"));
+        Draw.lock(g, dx3 + 8, top + 6, t.c("text.muted"));
+        Draw.label(g, Words.t("plots.card.log"), dx3 + 18, top + 9.5f, 11.5f, Weight.REGULAR, t.c("text.secondary"));
+        String dv = Integer.toString(day);
+        Draw.label(g, dv, dx3 + 8, top + 21, 17, Weight.SEMIBOLD, t.c("text.primary"));
+        Draw.label(g, Words.plural(day, "attempts"), dx3 + 8 + Draw.labelWidth(dv, 17, Weight.SEMIBOLD) + 4, top + 22, 11.5f, Weight.REGULAR, t.c("text.muted"));
+        String open = Words.t("plots.card.log.open");
+        float ow = Draw.labelWidth(open, 11.5f, Weight.MEDIUM);
+        boolean oh = Kit.over(mx, my, dx3 + 8, top + 27, (int) ow, 8);
+        Draw.label(g, open, dx3 + 8, top + 31, 11.5f, Weight.MEDIUM, oh ? t.c("text.primary") : t.c("accent"));
+        hits.add(dx3 + 8, top + 27, (int) ow, 8, b -> setPage(Page.LOG));
         int y = top + 44;
         if (list.isEmpty()) {
             String text = Words.t(LandCache.state() == null ? "screen.waiting" : "plots.empty");
@@ -1341,17 +1379,21 @@ public final class LandScreen extends ScaledScreen {
     private void showOnMap(ClaimsNet.PlotInfo p) {
         if (p.chunks().length == 0) return;
         long c = works.repka.rysclaims.data.Plots.center(LongArrayList.wrap(p.chunks()));
-        net.minecraft.resources.ResourceLocation loc = net.minecraft.resources.ResourceLocation.tryParse(p.dim());
+        showOnMap(p.dim(), Chunks.x(c) * 16 + 8, Chunks.z(c) * 16 + 8, LandCache.plotName(p.id(), p.name()));
+    }
+
+    /** Точка на карте RYSMap; без RYSMap сетка этого окна на ней. */
+    private void showOnMap(String dimId, int x, int z, String label) {
+        net.minecraft.resources.ResourceLocation loc = net.minecraft.resources.ResourceLocation.tryParse(dimId);
         if (loc == null) return;
         if (MapApi.get().present()) {
             ResourceKey<Level> key = ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, loc);
-            MapApi.get().open(MapApi.Target.builder(key, Chunks.x(c) * 16 + 8, 64, Chunks.z(c) * 16 + 8)
-                .label(Component.literal(LandCache.plotName(p.id(), p.name()))).build());
+            MapApi.get().open(MapApi.Target.builder(key, x, 64, z).label(Component.literal(label)).build());
             return;
         }
-        switchDim(p.dim());
-        centerX = Chunks.x(c) * 16 + 8;
-        centerZ = Chunks.z(c) * 16 + 8;
+        switchDim(dimId);
+        centerX = x;
+        centerZ = z;
         setPage(Page.GRID);
     }
 
@@ -1502,6 +1544,142 @@ public final class LandScreen extends ScaledScreen {
         Kit.dropdownList(g, t, hits, visDrop, options, st == null ? 0 : st.visibility(), 100, mx, my, i -> landEdit(ClaimsNet.LAND_VISIBILITY, i, false, ""));
     }
 
+    // ---- журнал (макет 43) ----
+
+    /** Фильтр журнала: все, игроки, машины, взрывы. */
+    private int logFilter;
+    private int logScroll;
+
+    private static int kind(ClaimsNet.LogLine l) {
+        if ("explosion".equals(l.reason())) return 3;
+        return l.machine() ? 2 : 1;
+    }
+
+    /** Сколько строк журнала за последние сутки (карточка «Защита за сутки», счёт у пилюли). */
+    static int lastDay(ClaimsNet.@Nullable LogPage p) {
+        if (p == null) return 0;
+        long border = System.currentTimeMillis() - 86_400_000L;
+        int n = 0;
+        for (ClaimsNet.LogLine l : p.lines()) if (l.last() >= border) n++;
+        return n;
+    }
+
+    /** Кто: ник, машина или тип взрыва (id сущности переводится по названию сущности). */
+    static String who(ClaimsNet.LogLine l) {
+        if (l.name().isEmpty()) return Words.t("log.nobody");
+        if (l.name().indexOf(':') > 0 && !l.machine()) {
+            var type = net.minecraft.world.entity.EntityType.byString(l.name());
+            if (type.isPresent()) return type.get().getDescription().getString();
+        }
+        return l.name();
+    }
+
+    static String whenShort(long at) {
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        var t = java.time.Instant.ofEpochMilli(at).atZone(zone);
+        if (t.toLocalDate().equals(java.time.LocalDate.now(zone))) return t.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+        return when(at);
+    }
+
+    private void journal(GuiGraphics g, Theme t, ClaimsNet.Hello h, int mx, int my) {
+        LandCache.wantLog(5000);
+        ClaimsNet.LogPage page = LandCache.log();
+        int x = wx + 12, top = wy + HEADER + BAR + 4, sideW = 170, w = ww - 24 - sideW - 12;
+        List<ClaimsNet.LogLine> all = page == null ? List.of() : page.lines();
+        int[] counts = new int[4];
+        counts[0] = all.size();
+        for (ClaimsNet.LogLine l : all) counts[kind(l)]++;
+        // фильтры-чипы
+        int cx = x;
+        String[] names = {Words.t("log.filter.all"), Words.t("log.filter.players"), Words.t("log.filter.machines"), Words.t("log.filter.explosions")};
+        for (int i = 0; i < 4; i++) {
+            int f = i;
+            cx += Kit.pill(g, t, hits, cx, top, names[i] + " · " + counts[i], logFilter == i, mx, my, () -> {
+                logFilter = f;
+                logScroll = 0;
+            }) + 3;
+        }
+        int y = top + 20;
+        List<ClaimsNet.LogLine> list = new ArrayList<>();
+        for (ClaimsNet.LogLine l : all) if (logFilter == 0 || kind(l) == logFilter) list.add(l);
+        if (page == null || list.isEmpty()) {
+            String text = Words.t(page == null ? "screen.waiting" : "log.empty");
+            float tw = Draw.labelWidth(text, 12.5f, Weight.REGULAR);
+            Draw.label(g, text, x + (w - tw) / 2f, y + 40, 12.5f, Weight.REGULAR, t.c("text.muted"));
+        } else {
+            int rowH = 18, bottom = wy + wh - 14;
+            int visible = Math.max(1, (bottom - y) / rowH);
+            logScroll = Math.max(0, Math.min(logScroll, list.size() - visible));
+            int shown = Math.min(visible, list.size() - logScroll);
+            Draw.roundBox(g, x, y, w, shown * rowH, 5, t.c("card.bg"), t.c("card.border"));
+            for (int i = 0; i < shown; i++) {
+                ClaimsNet.LogLine l = list.get(logScroll + i);
+                int ry = y + i * rowH;
+                float cy = ry + rowH / 2f;
+                if (i > 0) Draw.rect(g, x + 6, ry, w - 12, 1, t.c("card.border"));
+                Draw.label(g, whenShort(l.last()), x + 6, cy, 11.5f, Weight.REGULAR, t.c("text.muted"));
+                Icons.Shape icon = switch (l.reason()) {
+                    case "build", "guest", "wilderness" -> Icons.Shape.PICK;
+                    case "open" -> Icons.Shape.ARCHIVE;
+                    case "use" -> Icons.Shape.KEY;
+                    case "entity" -> Icons.Shape.HAND;
+                    case "explosion" -> Icons.Shape.SPARK;
+                    default -> l.machine() ? Icons.Shape.GEAR : Icons.Shape.WARN;
+                };
+                Draw.roundBox(g, x + 40, ry + 3, 12, 12, 3, t.c("slot.bg"), t.c("card.border"));
+                Icons.draw(g, icon, x + 42.5f, ry + 5.5f, 7, t.c("text.secondary"));
+                String what = Words.t((l.machine() ? "log.what.machine." : "log.what.") + l.reason());
+                String whoName = who(l);
+                String count = l.count() > 1 ? " ×" + l.count() : "";
+                String where = (l.plot().isEmpty() ? "" : (l.plot().startsWith("#") ? Words.t("plot.unnamed", l.plot().substring(1)) : l.plot()) + " · ")
+                    + Words.t("log.coords", l.x(), l.y(), l.z());
+                String map = Words.t("plots.on_map");
+                int bw = (int) Kit.buttonWidth(map, 11.5f);
+                float whereW = Draw.labelWidth(where, 11, Weight.REGULAR);
+                float textRoom = w - 58 - bw - 10 - whereW - 10;
+                String text = Draw.ellipsize(what + " · " + whoName + count, textRoom, 12, Weight.REGULAR);
+                Draw.label(g, text, x + 58, cy, 12, Weight.REGULAR, t.c("text.primary"));
+                Draw.label(g, where, x + w - 6 - bw - 6 - whereW, cy, 11, Weight.REGULAR, t.c("text.muted"));
+                if (Kit.over(mx, my, x + 58, ry, (int) textRoom, rowH)) {
+                    List<String> tipLines = new ArrayList<>(List.of(what + " · " + whoName + count));
+                    if (l.count() > 1 && l.first() < l.last()) tipLines.add(Words.t("log.span", whenShort(l.first()), whenShort(l.last())));
+                    tip = tipLines;
+                }
+                ClaimsNet.LogLine line = l;
+                Kit.button(g, t, hits, x + w - 6 - bw, ry + 3, bw, 12, map, false, mx, my, () -> showOnMap(line.dim(), line.x(), line.z(), ""));
+            }
+            if (list.size() > visible) {
+                Draw.label(g, Words.t("plots.scroll", logScroll + 1, logScroll + shown, list.size()), x, wy + wh - 8, 11, Weight.REGULAR, t.c("text.muted"));
+            }
+        }
+        // настройки справа
+        int sx = x + w + 12, sy = top + 2;
+        Kit.caps(g, t, Words.t("log.settings"), sx, sy + 3, 10.5f, 0.44f);
+        sy += 12;
+        boolean edit = page != null && page.canEdit();
+        sy = logToggle(g, t, sx, sy, sideW, Words.t("log.feed"), Words.t("log.feed.note"), page != null && page.feed(), edit, ClaimsNet.LAND_LOG_FEED, mx, my);
+        sy = logToggle(g, t, sx, sy, sideW, Words.t("log.toast"), Words.t("log.toast.note"), page != null && page.toast(), edit, ClaimsNet.LAND_LOG_TOAST, mx, my);
+        callout(g, t, sx, sy + 2, sideW, Words.t("log.info", page == null ? 7 : page.days()));
+    }
+
+    private int logToggle(GuiGraphics g, Theme t, int x, int y, int w, String title, String note, boolean on, boolean edit, int kind, int mx, int my) {
+        Draw.label(g, title, x, y + 5, 12, Weight.SEMIBOLD, t.c("text.primary"));
+        List<String> lines = Draw.wrapLabel(note, w - 26, 10.5f, Weight.REGULAR, 2);
+        float ly = y + 12.5f;
+        for (String line : lines) {
+            Draw.label(g, line, x, ly, 10.5f, Weight.REGULAR, t.c("text.muted"));
+            ly += 7;
+        }
+        int tx = x + w - 18;
+        boolean hot = edit && Kit.over(mx, my, tx, y + 2, 18, 10);
+        Kit.toggle(g, t, tx, y + 2, on, hot);
+        if (edit) {
+            boolean next = !on;
+            hits.add(tx, y + 2, 18, 10, b -> landEdit(kind, 0, next, ""));
+        }
+        return (int) ly + 6;
+    }
+
     // ---- ввод ----
 
     void toPlayer() {
@@ -1619,6 +1797,10 @@ public final class LandScreen extends ScaledScreen {
         if (presetDrop.scrolled(x, y, sy) || dimDrop.scrolled(x, y, sy) || visDrop.scrolled(x, y, sy)) return true;
         if (page == Page.PLOTS && sy != 0) {
             plotScroll += sy > 0 ? -1 : 1;
+            return true;
+        }
+        if (page == Page.LOG && sy != 0) {
+            logScroll += sy > 0 ? -2 : 2;
             return true;
         }
         if (overCanvas(x, y) && sy != 0) {

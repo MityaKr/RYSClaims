@@ -69,6 +69,8 @@ public final class TeamLand {
     /** Часы после выхода для режима «и ещё N часов» (0.2). */
     public int loadHours;
     public Visibility visibility = Visibility.ALL;
+    /** Журнал отказов: писать попытки чужих в ленту команды (одной строкой, повторы склеены) и тост участникам в сети. */
+    public boolean logFeed = true, logToast = false;
     public Rights rights;
     private final boolean[] flags = new boolean[Flag.values().length];
     public final Set<UUID> trusted = new LinkedHashSet<>();
@@ -115,6 +117,7 @@ public final class TeamLand {
     boolean worthSaving(Rights defaults) {
         if (claimed > 0 || bonusClaims != 0 || bonusForce != 0 || !trusted.isEmpty() || !machineNames.isEmpty()) return true;
         if (legacyName != null || loadMode != Settings.LoadMode.ONLINE || visibility != Visibility.ALL || !plots.isEmpty()) return true;
+        if (!logFeed || logToast) return true;
         if (!rights.equals(defaults)) return true;
         for (Flag f : Flag.values()) if (flag(f) != f.def) return true;
         return false;
@@ -128,6 +131,8 @@ public final class TeamLand {
         t.putString("loadMode", loadMode.key());
         t.putInt("loadHours", loadHours);
         t.putString("visibility", visibility.key());
+        t.putBoolean("logFeed", logFeed);
+        t.putBoolean("logToast", logToast);
         t.put("rights", rights.save());
         CompoundTag f = new CompoundTag();
         for (Flag x : Flag.values()) f.putBoolean(x.key, flag(x));
@@ -169,6 +174,8 @@ public final class TeamLand {
         land.loadMode = Settings.LoadMode.parse(t.getString("loadMode"), Settings.LoadMode.ONLINE);
         land.loadHours = t.getInt("loadHours");
         land.visibility = Visibility.parse(t.getString("visibility"), Visibility.ALL);
+        land.logFeed = !t.contains("logFeed") || t.getBoolean("logFeed");
+        land.logToast = t.getBoolean("logToast");
         land.rights = Rights.load(t.getCompound("rights"), defaults);
         CompoundTag f = t.getCompound("flags");
         for (Flag x : Flag.values()) land.flag(x, f.contains(x.key) ? f.getBoolean(x.key) : x.def);

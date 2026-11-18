@@ -118,6 +118,9 @@ public final class ClaimService {
 
         /** Переключатели, доверенные или видимость земли команды сменились: окну участников новое состояние. */
         default void landChanged(UUID team) {}
+
+        /** Игрок занял, освободил, включил или выключил прогрузку на {@code count} чанках своей команды (лента). */
+        default void landEdited(UUID actor, UUID team, String op, int count) {}
     }
 
     private final ClaimData data;
@@ -328,6 +331,7 @@ public final class ClaimService {
         if (!r.changed.isEmpty()) {
             plots(team, dim);
             hooks.claimed(team, dim, r.changed);
+            if (actor != null) hooks.landEdited(actor, team, "claim", r.changed.size());
         }
         return r;
     }
@@ -362,6 +366,7 @@ public final class ClaimService {
         if (r.done > 0) {
             data.edited();
             hooks.dirty();
+            if (actor != null) hooks.landEdited(actor, team, "release", r.done);
         }
         return r;
     }
@@ -418,6 +423,7 @@ public final class ClaimService {
             data.edited();
             hooks.forceChanged(team);
             hooks.dirty();
+            if (actor != null) hooks.landEdited(actor, team, on ? "load" : "unload", r.done);
         }
         return r;
     }
@@ -525,6 +531,12 @@ public final class ClaimService {
         accessEdited(team);
     }
 
+    /** Клетка окна по столбцу роли ({@code Rights.COLUMNS}), с монотонностью. */
+    public void toggleRole(UUID team, Rights.Action a, String column, boolean on) {
+        data.landOrCreate(team).rights.toggleRole(a, column, on);
+        accessEdited(team);
+    }
+
     /** Отметка по столбцу таблицы ({@code Rights.COLUMNS} или {@code team}), без монотонности. */
     public void setRight(UUID team, Rights.Action a, String column, boolean on) {
         data.landOrCreate(team).rights.set(a, column, on);
@@ -557,6 +569,15 @@ public final class ClaimService {
         if (land.visibility == v) return;
         land.visibility = v;
         hooks.visibilityChanged(team);
+        hooks.landChanged(team);
+        hooks.dirty();
+    }
+
+    /** Настройки журнала команды: лента и тост. */
+    public void setLog(UUID team, boolean feed, boolean toast) {
+        TeamLand land = data.landOrCreate(team);
+        land.logFeed = feed;
+        land.logToast = toast;
         hooks.landChanged(team);
         hooks.dirty();
     }
@@ -645,7 +666,9 @@ public final class ClaimService {
         /** Свободная земля закрыта сервером. */
         WILDERNESS,
         /** Машина: профиль не участник, место неизвестно или снаружи. */
-        MACHINE;
+        MACHINE,
+        /** Взрыв не тронул блоки земли (только журнал). */
+        EXPLOSION;
 
         public String key() {
             return name().toLowerCase(java.util.Locale.ROOT);

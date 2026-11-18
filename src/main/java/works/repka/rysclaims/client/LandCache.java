@@ -80,6 +80,8 @@ public final class LandCache {
     private static long editAt;
     private static ClaimsNet.@Nullable LandState state;
     private static long stateRevision;
+    private static ClaimsNet.@Nullable LogPage log;
+    private static long logAt;
 
     private LandCache() {}
 
@@ -136,6 +138,24 @@ public final class LandCache {
         state = s;
         stateRevision++;
         counter++;
+    }
+
+    public static void log(ClaimsNet.LogPage p) {
+        log = p;
+        logAt = System.currentTimeMillis();
+    }
+
+    /** Журнал своей земли или null, пока сервер не прислал. */
+    public static ClaimsNet.@Nullable LogPage log() {
+        return log;
+    }
+
+    /** Попросить журнал, если он старше {@code maxAgeMs}. */
+    public static void wantLog(long maxAgeMs) {
+        long now = System.currentTimeMillis();
+        if (now - logAt < maxAgeMs) return;
+        logAt = now;
+        send(ClaimsNet.LogRequest.INSTANCE);
     }
 
     /** Земля своей команды для окна: участки, доверенные, переключатели; null, пока сервер не прислал. */
@@ -368,6 +388,8 @@ public final class LandCache {
         editEpoch = -1;
         state = null;
         stateRevision++;
+        log = null;
+        logAt = 0;
         counter++;
         lastSubscribe = 0;
     }

@@ -58,7 +58,7 @@ public final class ClaimSync {
         ClaimsNet.@Nullable Hello hello;
         /** Команды, о которых игрок знает, и что ему на их земле можно. */
         final Object2IntOpenHashMap<UUID> access = new Object2IntOpenHashMap<>();
-        long editSecond;
+        long editSecond, lastLog;
         int edits;
     }
 
@@ -237,8 +237,11 @@ public final class ClaimSync {
             this.v = v;
         }
 
+        final Map<UUID, Boolean> hidden = new HashMap<>();
+
         void add(long chunk) {
             var c = s.data().get(v.dimension, chunk);
+            if (c != null && !visible(s, p, v.dimension, RegionBytes.regionOf(chunk), c.team(), hidden)) c = null;
             if (c == null) {
                 chunks.add(chunk);
                 codes.write(0);
@@ -372,6 +375,10 @@ public final class ClaimSync {
                 s.applyPreset(team, Rights.Preset.values()[e.value()]);
             }
             case ClaimsNet.RIGHTS_TABLE -> s.setRights(team, Rights.fromBits(e.value()));
+            case ClaimsNet.RIGHTS_ROLE -> {
+                if (e.action() < 0 || e.action() >= actions.length || e.column() < 0 || e.column() >= Rights.COLUMNS.size()) return;
+                s.toggleRole(team, actions[e.action()], Rights.COLUMNS.get(e.column()), e.on());
+            }
             default -> {
                 return;
             }
@@ -423,6 +430,17 @@ public final class ClaimSync {
                     }
                 }
             }
+            case ClaimsNet.LAND_LOG_FEED, ClaimsNet.LAND_LOG_TOAST -> {
+                if (!s.editsRights(id, team, admin)) {
+                    r.skipped.put(s.settings().teamsEditRights ? ClaimService.Skip.NO_RIGHT : ClaimService.Skip.LOCKED, 1);
+                    break;
+                }
+                TeamLand land = s.data().landOrCreate(team);
+                if (e.kind() == ClaimsNet.LAND_LOG_FEED) s.setLog(team, e.on(), land.logToast);
+                else s.setLog(team, land.logFeed, e.on());
+                r.done = 1;
+                ClaimsNet.send(player, logPage(s, player.server, id));
+            }
             case ClaimsNet.LAND_RENAME -> {
                 if (s.plot(team, e.id()) == null) r.skipped.put(ClaimService.Skip.NOT_FOUND, 1);
                 else if (s.renamePlot(id, team, e.id(), e.text(), admin)) r.done = 1;
@@ -443,6 +461,33 @@ public final class ClaimSync {
         }
         touch(team);
         ClaimsNet.send(player, new ClaimsNet.EditResult(ClaimsNet.OP_LAND + e.kind(), r.done, skipped(r)));
+    }
+
+    /** Окно просит журнал своей земли: не чаще раза в секунду. */
+    public static void log(ServerPlayer player) {
+        Viewer v = VIEWERS.get(player.getUUID());
+        if (v == null || !ClaimsServer.running()) return;
+        long now = System.currentTimeMillis();
+        if (now - v.lastLog < 1000) return;
+        v.lastLog = now;
+        ClaimsNet.send(player, logPage(ClaimsServer.service(), player.server, player.getUUID()));
+    }
+
+    static ClaimsNet.LogPage logPage(ClaimService s, MinecraftServer server, UUID player) {
+        UUID team = s.teams().teamOf(player);
+        TeamLand land = s.data().land(team);
+        DenyLog log = ClaimsServer.log();
+        List<ClaimsNet.LogLine> lines = new ArrayList<>();
+        if (log != null) {
+            for (DenyLog.Entry e : log.recent(team, ClaimsNet.LogPage.MAX)) {
+                var plot = s.plotAt(e.dim(), works.repka.rysclaims.data.Chunks.pack(e.x() >> 4, e.z() >> 4));
+                String plotName = plot == null || !s.data().get(e.dim(), works.repka.rysclaims.data.Chunks.pack(e.x() >> 4, e.z() >> 4)).team().equals(team) ? ""
+                    : plot.name.isEmpty() ? "#" + plot.id : plot.name;
+                lines.add(new ClaimsNet.LogLine(e.last(), e.first(), e.count(), e.name(), e.machine(), e.reason(), e.dim(), e.x(), e.y(), e.z(), plotName));
+            }
+        }
+        boolean edit = s.editsRights(player, team, s.bypass(player));
+        return new ClaimsNet.LogPage(land == null || land.logFeed, land != null && land.logToast, edit, s.settings().logDays, lines);
     }
 
     /** Игрок по нику (в сети или в кэше профилей) или по UUID строкой. */
@@ -510,7 +555,11 @@ public final class ClaimSync {
 
     private static void sendRegion(ClaimService s, ServerPlayer p, Viewer v, String dim, long region) {
         int rx = works.repka.rysclaims.data.Chunks.x(region), rz = works.repka.rysclaims.data.Chunks.z(region);
-        RegionBytes.Built b = RegionBytes.build(chunk -> s.data().get(dim, chunk), rx, rz);
+        Map<UUID, Boolean> hidden = new HashMap<>();
+        RegionBytes.Built b = RegionBytes.build(chunk -> {
+            var c = s.data().get(dim, chunk);
+            return c == null || visible(s, p, dim, region, c.team(), hidden) ? c : null;
+        }, rx, rz);
         List<ClaimsNet.TeamEntry> palette = new ArrayList<>(b.palette().size());
         for (UUID team : b.palette()) palette.add(entry(s, p, v, team));
         ClaimsNet.send(p, new ClaimsNet.Region(dim, rx, rz, epoch, palette, RegionBytes.encode(b.codes())));
@@ -519,7 +568,31 @@ public final class ClaimSync {
     private static ClaimsNet.TeamEntry entry(ClaimService s, ServerPlayer p, Viewer v, UUID team) {
         int bits = access(s, p.getUUID(), team);
         v.access.put(team, bits);
+        if (hidden(s, p.getUUID(), team)) return new ClaimsNet.TeamEntry(team, "", HIDDEN_COLOR, bits);
         return new ClaimsNet.TeamEntry(team, Commands.teamName(s, team).getString(), 0xFF000000 | TeamsApi.get().color(team), bits);
+    }
+
+    /** Цвет скрытой земли у чужого клиента: серый, без цвета команды. */
+    static final int HIDDEN_COLOR = 0xFF7A7F87;
+
+    /**
+     * Скрыта ли земля команды от игрока (план 9.2, «Скрытая земля»): «Землю видят: союз» прячет её от чужих, «только команда»
+     * и от союзников. Скрытая уходит как «занято» без имени и цвета и только в 9 регионах вокруг игрока: этого хватает,
+     * чтобы гасить нажатие, и не хватает, чтобы найти базу по карте. Оператору в режиме оператора видно всё.
+     */
+    static boolean hidden(ClaimService s, UUID viewer, UUID team) {
+        TeamLand land = s.data().land(team);
+        if (land == null || land.visibility == TeamLand.Visibility.ALL || s.bypass(viewer)) return false;
+        Rights.Relation rel = s.relation(viewer, team);
+        return land.visibility == TeamLand.Visibility.TEAM ? rel != Rights.Relation.TEAM : rel == Rights.Relation.OTHER;
+    }
+
+    /** Чанк команды уходит игроку: открытая земля всегда, скрытая только в 3×3 регионах вокруг него в его измерении. */
+    private static boolean visible(ClaimService s, ServerPlayer p, String dim, long region, UUID team, Map<UUID, Boolean> cache) {
+        if (!cache.computeIfAbsent(team, t -> hidden(s, p.getUUID(), t))) return true;
+        if (!Loader.id(p.level().dimension()).equals(dim)) return false;
+        int prx = Math.floorDiv(p.getBlockX(), 512), prz = Math.floorDiv(p.getBlockZ(), 512);
+        return Math.abs(works.repka.rysclaims.data.Chunks.x(region) - prx) <= 1 && Math.abs(works.repka.rysclaims.data.Chunks.z(region) - prz) <= 1;
     }
 
     /** Что можно игроку на земле команды: биты {@code ClaimsNet.BUILD} и дальше по порядку {@code Rights.Action}. */

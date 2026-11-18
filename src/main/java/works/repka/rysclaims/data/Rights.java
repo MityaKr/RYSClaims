@@ -176,6 +176,40 @@ public final class Rights {
         if (c == Column.TEAM) set(a, "team", false);
     }
 
+    // ---- окно 0.2: столбцы по ролям (макет 41) ----
+
+    /** Что показывает клетка столбца роли ({@link #COLUMNS}): действующее право с учётом монотонности. */
+    public boolean shownRole(Action a, String column) {
+        return switch (column) {
+            case LEADER -> true;
+            case ALLIES -> allows(a, Relation.ALLY, null);
+            case ALL -> allows(a, Relation.OTHER, null);
+            default -> allows(a, Relation.TEAM, column);
+        };
+    }
+
+    /**
+     * Отметка в столбце роли. Сначала таблица приводится к тому, что видно (столбец, открытый через «союзников», получает
+     * свою отметку), затем: включённые «Союзники» включают все роли, «Все» включают всё; снятая роль снимает «Союзников» и
+     * «Всех», снятые «Союзники» снимают «Всех». Лидера снять нельзя.
+     */
+    public void toggleRole(Action a, String column, boolean on) {
+        if (!COLUMNS.contains(column) || LEADER.equals(column)) return;
+        Set<String> s = table.get(a);
+        Set<String> seen = new LinkedHashSet<>();
+        for (String c : COLUMNS) if (shownRole(a, c)) seen.add(c);
+        s.clear();
+        s.addAll(seen);
+        if (on) {
+            s.add(column);
+            if (ALLIES.equals(column) || ALL.equals(column)) s.addAll(List.of(OFFICER, MEMBER, GUEST, ALLIES));
+            return;
+        }
+        s.remove(column);
+        s.remove(ALL);
+        if (!ALL.equals(column)) s.remove(ALLIES);
+    }
+
     /** Таблица числом для сети: на действие шесть бит в порядке {@link #COLUMNS}. */
     public int bits() {
         int out = 0;
