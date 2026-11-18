@@ -139,6 +139,7 @@ public final class ClaimSync {
     }
 
     public static void logout(UUID player) {
+        if (ClaimsServer.running()) ClaimsServer.service().clearBypass(player);
         VIEWERS.remove(player);
     }
 
@@ -373,7 +374,7 @@ public final class ClaimSync {
         UUID id = player.getUUID();
         UUID team = s.teams().teamOf(id);
         ClaimService.Result r = new ClaimService.Result();
-        if (!s.editsRights(id, team, s.bypass(id))) {
+        if (!s.editsRights(id, team, s.bypass(id) && player.hasPermissions(2))) {
             r.skipped.put(s.settings().teamsEditRights ? ClaimService.Skip.NO_RIGHT : ClaimService.Skip.LOCKED, 1);
             ClaimsNet.send(player, new ClaimsNet.EditResult(ClaimsNet.OP_RIGHTS, 0, skipped(r)));
             return;
@@ -422,7 +423,7 @@ public final class ClaimSync {
         ClaimService s = ClaimsServer.service();
         UUID id = player.getUUID();
         UUID team = s.teams().teamOf(id);
-        boolean admin = s.bypass(id);
+        boolean admin = s.bypass(id) && player.hasPermissions(2);
         ClaimService.Result r = new ClaimService.Result();
         switch (e.kind()) {
             case ClaimsNet.LAND_TRUST, ClaimsNet.LAND_UNTRUST, ClaimsNet.LAND_FLAG, ClaimsNet.LAND_VISIBILITY -> {

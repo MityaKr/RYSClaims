@@ -101,7 +101,10 @@ public final class ClaimsServer {
         MinecraftServer srv = server;
         if (s == null || srv == null) return;
         ticks++;
-        if (ticks % 20 == 0) s.tick();
+        if (ticks % 20 == 0) {
+            s.tick();
+            dropBypass(srv, s);
+        }
         DenyLog l = log;
         if (l != null) {
             if (ticks % LOG_FLUSH_TICKS == 0) {
@@ -117,6 +120,19 @@ public final class ClaimsServer {
             Loader.sync(srv, s);
         }
         ClaimSync.tick(srv, s);
+    }
+
+    /**
+     * Режим оператора держится, пока игрок в сети и у него уровень 2 (перепроверка 18.11, пункт 9): раньше снятый op до
+     * перезапуска строил и открывал везде. Проверка раз в секунду; вышедший теряет режим сразу ({@code ClaimSync.logout}).
+     */
+    private static void dropBypass(MinecraftServer srv, ClaimService s) {
+        for (java.util.UUID id : s.bypassers()) {
+            ServerPlayer p = srv.getPlayerList().getPlayer(id);
+            if (p != null && p.hasPermissions(2)) continue;
+            s.clearBypass(id);
+            if (p != null) p.sendSystemMessage(Msg.t("bypass.off", "Operator mode off"));
+        }
     }
 
     /** Прогрузка пересчитается на следующем тике (игрок вышел: к тому времени его уже нет в списке). */

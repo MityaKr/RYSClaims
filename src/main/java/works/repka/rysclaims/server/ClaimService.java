@@ -508,6 +508,16 @@ public final class ClaimService {
         return bypass.contains(player);
     }
 
+    /** Кто сейчас в режиме оператора. */
+    public java.util.List<UUID> bypassers() {
+        return new java.util.ArrayList<>(bypass);
+    }
+
+    /** Снимает режим оператора (op сняли, игрок вышел). */
+    public void clearBypass(UUID player) {
+        if (bypass.remove(player)) hooks.accessChanged();
+    }
+
     /** Переключает режим оператора; возвращает новое состояние. */
     public boolean toggleBypass(UUID player) {
         boolean on = !bypass.remove(player);
