@@ -1869,8 +1869,27 @@ public final class LandView {
     private @Nullable String adminOpen;
     private int teamScroll;
 
+    /** Настройки сервера до правки (первое значение за полминуты): «Вернуть · 30 с», как у прав (разбор скептика 18.11). */
+    private final Map<String, String> serverUndo = new java.util.LinkedHashMap<>();
+    private long serverUndoUntil;
+
     private void adminEdit(String kind, String key, String value) {
+        if ("setting".equals(kind)) {
+            ClaimsNet.AdminState a = LandCache.admin();
+            if (System.currentTimeMillis() > serverUndoUntil) serverUndo.clear();
+            if (a != null && !serverUndo.containsKey(key)) serverUndo.put(key, a.get(key));
+            serverUndoUntil = System.currentTimeMillis() + UNDO_MS;
+        }
         LandCache.send(new ClaimsNet.AdminEdit(kind, key, value));
+    }
+
+    /** Вернуть настройки сервера, какими они были до правок последних 30 секунд. */
+    private void serverUndo() {
+        for (Map.Entry<String, String> e : serverUndo.entrySet()) {
+            LandCache.send(new ClaimsNet.AdminEdit("setting", e.getKey(), e.getValue()));
+        }
+        serverUndo.clear();
+        serverUndoUntil = 0;
     }
 
     /** Карточка настроек: рамка, заголовок капсом. Возвращает y первой строки. */
@@ -1978,7 +1997,13 @@ public final class LandView {
         } else {
             Draw.label(g, Words.t("admin.import.level"), ix, top2 + ch2 - 14, 11, Weight.REGULAR, t.c("text.muted"));
         }
-        Draw.label(g, Words.t("admin.note"), x, wy + wh - 12, 11, Weight.REGULAR, t.c("text.muted"));
+        long left = serverUndoUntil - System.currentTimeMillis();
+        if (!serverUndo.isEmpty() && left > 0) {
+            undoBar(g, t, Words.t("admin.changed", serverUndo.size()), left, mx, my, this::serverUndo);
+        } else {
+            serverUndo.clear();
+            Draw.label(g, Words.t("admin.note"), x, wy + wh - 12, 11, Weight.REGULAR, t.c("text.muted"));
+        }
         // раскрытый список последним
         if (adminOpen != null) {
             String key = adminOpen;

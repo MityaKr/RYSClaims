@@ -18,6 +18,7 @@
   "rysclaims.admin.card.new_teams": "Rights of new teams",
   "rysclaims.admin.card.players": "Players and loading",
   "rysclaims.admin.card.world": "World protection",
+  "rysclaims.admin.changed": "Server settings changed (%s).",
   "rysclaims.admin.for": "operator, team %s",
   "rysclaims.admin.import.empty": "There is no land yet: it can be imported from this world's FTB Chunks files.",
   "rysclaims.admin.import.has": "Land in the world: %s chunks. An import would overwrite it; an import can be undone while nobody changed the land.",

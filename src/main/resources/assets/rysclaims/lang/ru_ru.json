@@ -18,6 +18,7 @@
   "rysclaims.admin.card.new_teams": "Права новых команд",
   "rysclaims.admin.card.players": "Игроки и прогрузка",
   "rysclaims.admin.card.world": "Защита мира",
+  "rysclaims.admin.changed": "Настройки сервера изменены (%s).",
   "rysclaims.admin.for": "оператор, команда %s",
   "rysclaims.admin.import.empty": "Земли в мире ещё нет: её можно перенести из файлов FTB Chunks этого мира.",
   "rysclaims.admin.import.has": "Земли в мире: %s чанков. Перенос затёр бы её; отменить перенос можно, пока землю не правили.",
