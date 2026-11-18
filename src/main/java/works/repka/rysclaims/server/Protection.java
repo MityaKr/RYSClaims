@@ -47,6 +47,7 @@ import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.level.PistonEvent;
 import org.jetbrains.annotations.Nullable;
 import works.repka.rysclaims.RYSClaims;
+import works.repka.rysclaims.compat.gravestone.Graves;
 import works.repka.rysclaims.compat.sable.SableLand;
 import works.repka.rysclaims.data.Chunks;
 import works.repka.rysclaims.net.ClaimsNet;
@@ -248,7 +249,41 @@ public final class Protection {
             case MACHINE -> "Machines are not allowed here";
             case EXPLOSION -> "Explosions do not break blocks here";
             case OPERATOR -> "Operator edit";
+            case GRAVE -> "Took back own grave";
         };
+    }
+
+    /**
+     * Скрыто ли от игрока содержимое блок-сущности или сущности (Jade и подобные подсказки): null значит «можно смотреть»,
+     * иначе имя хозяев земли для игрока (пустое, если земля от него скрыта). Свободная земля не скрывает. Без журнала и замка: подсказка спрашивает
+     * каждые полсекунды. Блок судится тем же правом, что правый клик (тег {@code free} открыт, {@code use} это «Двери»),
+     * сущность правом «Животные, рамки, стойки» (монстры, игроки и свои питомцы открыты).
+     */
+    public static @Nullable String hiddenFrom(@Nullable Player player, Level level, @Nullable BlockPos pos, @Nullable Entity entity) {
+        if (player == null || player instanceof FakePlayer) return null;
+        ClaimService s = service(level);
+        if (s == null) return null;
+        String dim = Loader.id(level.dimension());
+        if (!s.data().anyIn(dim)) return null;
+        BlockPos at;
+        Rights.Action action;
+        if (entity != null) {
+            if (entity instanceof Player || entity instanceof Enemy) return null;
+            if (entity instanceof OwnableEntity own && player.getUUID().equals(own.getOwnerUUID())) return null;
+            at = entity.blockPosition();
+            action = Rights.Action.ENTITY;
+        } else if (pos != null) {
+            BlockState state = level.getBlockState(pos);
+            if (state.is(FREE)) return null;
+            at = pos;
+            action = state.is(USE) ? Rights.Action.USE : Rights.Action.OPEN;
+        } else {
+            return null;
+        }
+        if (allowed(player, level, at, action)) return null;
+        BlockPos world = SableLand.toWorld(level, at);
+        UUID owner = s.data().owner(dim, Chunks.pack(world.getX() >> 4, world.getZ() >> 4));
+        return owner == null ? null : ownerName(s, player.getUUID(), owner);
     }
 
     /** То же, что {@link #allowed}, но отказ уходит в журнал и игроку (для перехватов {@code mixin/}). */
@@ -261,7 +296,24 @@ public final class Protection {
     // ---- блоки ----
 
     private static void onBreak(BlockEvent.BreakEvent e) {
-        if (e.getLevel() instanceof Level level && !check(e.getPlayer(), level, e.getPos(), Rights.Action.BUILD)) e.setCanceled(true);
+        if (!(e.getLevel() instanceof Level level)) return;
+        if (Graves.own(e.getPlayer(), level, e.getPos())) {
+            graveTaken(e.getPlayer(), level, e.getPos());
+            return;
+        }
+        if (!check(e.getPlayer(), level, e.getPos(), Rights.Action.BUILD)) e.setCanceled(true);
+    }
+
+    /** Своя могила на земле, где строить нельзя: ломать можно, хозяевам земли строка в журнале. */
+    private static void graveTaken(Player player, Level level, BlockPos pos) {
+        if (allowed(player, level, pos, Rights.Action.BUILD)) return;
+        ClaimService s = service(level);
+        DenyLog log = ClaimsServer.log();
+        if (s == null || log == null) return;
+        String dim = Loader.id(level.dimension());
+        BlockPos world = SableLand.toWorld(level, pos);
+        UUID owner = s.data().owner(dim, Chunks.pack(world.getX() >> 4, world.getZ() >> 4));
+        if (owner != null) log.add(owner, player.getUUID(), player.getGameProfile().getName(), false, ClaimService.Reason.GRAVE, dim, world.getX(), world.getY(), world.getZ());
     }
 
     private static void onPlace(BlockEvent.EntityPlaceEvent e) {
@@ -284,6 +336,7 @@ public final class Protection {
     }
 
     private static void onLeftClick(PlayerInteractEvent.LeftClickBlock e) {
+        if (Graves.own(e.getEntity(), e.getLevel(), e.getPos())) return;
         if (!check(e.getEntity(), e.getLevel(), e.getPos(), Rights.Action.BUILD)) e.setCanceled(true);
     }
 

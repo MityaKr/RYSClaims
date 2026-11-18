@@ -20,6 +20,7 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.neoforged.neoforge.client.event.InputEvent;
 import org.jetbrains.annotations.Nullable;
+import works.repka.rysclaims.compat.gravestone.Graves;
 import works.repka.rysclaims.data.Rights;
 import works.repka.rysclaims.net.ClaimsNet;
 import works.repka.rysclaims.server.Protection;
@@ -48,7 +49,12 @@ public final class InputGate {
         String dim = mc.level.dimension().location().toString();
         Denial d = null;
         if (hit instanceof BlockHitResult bh) {
-            d = e.isAttack() ? check(dim, bh.getBlockPos(), Rights.Action.BUILD) : useOn(dim, mc, bh, p.getItemInHand(e.getHand()));
+            if (e.isAttack()) {
+                // своя могила Gravestone ломается на любой земле (сервер: Protection.onBreak)
+                if (!Graves.own(p, mc.level, bh.getBlockPos())) d = check(dim, bh.getBlockPos(), Rights.Action.BUILD);
+            } else {
+                d = useOn(dim, mc, bh, p.getItemInHand(e.getHand()));
+            }
         } else if (hit instanceof EntityHitResult eh && guarded(p, eh.getEntity())) {
             d = check(dim, eh.getEntity().blockPosition(), Rights.Action.ENTITY);
         }

@@ -1679,6 +1679,7 @@ public final class LandView {
                     case "use" -> Icons.Shape.KEY;
                     case "entity" -> Icons.Shape.HAND;
                     case "explosion" -> Icons.Shape.SPARK;
+                    case "grave" -> Icons.Shape.HAND;
                     default -> l.machine() ? Icons.Shape.GEAR : Icons.Shape.WARN;
                 };
                 Draw.roundBox(g, x + 40, ry + 3, 12, 12, 3, t.c("slot.bg"), t.c("card.border"));

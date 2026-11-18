@@ -49,7 +49,9 @@ public final class Links {
         FOREGOING("industrialforegoing", "IF", "industrialforegoing", "Foregoing"),
         PRODUCTIVE_BEES("productivebees", "Productive Bees", "productivebees", "ProductiveBees"),
         BOTANIA("botania", "Botania", "botania", null),
-        SABLE("sable", "Sable", "sable", "Sable");
+        SABLE("sable", "Sable", "sable", "Sable"),
+        JADE("jade", "Jade", "jade", "Jade"),
+        GRAVESTONE("gravestone", "Gravestone", "gravestone", null);
 
         public final String key, title, modId;
         public final @Nullable String prefix;

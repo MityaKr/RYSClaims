@@ -20,6 +20,8 @@
     "EnderioFarmMixin",
     "ForegoingAreaMixin",
     "IeExcavatorMixin",
+    "JadeStorageMixin",
+    "JadeTooltipMixin",
     "OccultismHarvestMixin",
     "OccultismSpiritsMixin",
     "OritechLaserMixin",

@@ -671,7 +671,9 @@ public final class ClaimService {
         /** Взрыв не тронул блоки земли (только журнал). */
         EXPLOSION,
         /** Оператор правил землю команды в режиме оператора (только журнал). */
-        OPERATOR;
+        OPERATOR,
+        /** Хозяин могилы сломал её на чужой земле (только журнал). */
+        GRAVE;
 
         public String key() {
             return name().toLowerCase(java.util.Locale.ROOT);
