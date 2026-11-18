@@ -439,6 +439,14 @@ public final class ClaimService {
      * @param from чанк машины или {@code Long.MIN_VALUE}, если место неизвестно
      */
     public boolean canMachine(String dim, long from, @Nullable UUID profile, long target, Rights.Action action) {
+        return canMachine(dim, from, profile, target, action, MACHINE_REACH);
+    }
+
+    /**
+     * То же с дальностью «рядом» в чанках. Машинам с дальним действием (лазер Oritech, постройка RFTools, пространственный
+     * ввод-вывод AE2) место берётся из блок-сущности, ему можно верить на любом расстоянии: обе точки на земле одной команды.
+     */
+    public boolean canMachine(String dim, long from, @Nullable UUID profile, long target, Rights.Action action, int reach) {
         Settings s = settings.get();
         if (!s.protection) return true;
         UUID owner = data.owner(dim, target);
@@ -448,11 +456,77 @@ public final class ClaimService {
             return true;
         }
         if (from != Long.MIN_VALUE && owner.equals(data.owner(dim, from))
-            && Math.abs(Chunks.x(from) - Chunks.x(target)) <= MACHINE_REACH
-            && Math.abs(Chunks.z(from) - Chunks.z(target)) <= MACHINE_REACH) {
+            && Math.abs(Chunks.x(from) - Chunks.x(target)) <= reach
+            && Math.abs(Chunks.z(from) - Chunks.z(target)) <= reach) {
             return land == null || land.flag(TeamLand.Flag.MACHINES_INSIDE);
         }
         return land != null && land.flag(TeamLand.Flag.MACHINES_OUTSIDE);
+    }
+
+    /** Почему отказано: строка у прицела и в журнале (план, раздел 11, «Что видит игрок при отказе»). */
+    public enum Reason {
+        BUILD, OPEN, USE, ENTITY, FLUID, PVP,
+        /** Своя команда, но у роли нет права. */
+        GUEST,
+        /** Свободная земля закрыта сервером. */
+        WILDERNESS,
+        /** Машина: профиль не участник, место неизвестно или снаружи. */
+        MACHINE;
+
+        public String key() {
+            return name().toLowerCase(java.util.Locale.ROOT);
+        }
+
+        public static Reason of(Rights.Action a) {
+            return switch (a) {
+                case BUILD -> BUILD;
+                case OPEN -> OPEN;
+                case USE -> USE;
+                case ENTITY -> ENTITY;
+            };
+        }
+
+        public static @Nullable Reason parse(String key) {
+            for (Reason r : values()) if (r.key().equals(key)) return r;
+            return null;
+        }
+    }
+
+    /** Причина отказа игроку в чанке (зовётся только после отказа {@link #can}). */
+    public Reason reason(UUID player, String dim, long chunk, Rights.Action action) {
+        UUID owner = data.owner(dim, chunk);
+        if (owner == null) return Reason.WILDERNESS;
+        if (relation(player, owner) == Rights.Relation.TEAM) return Reason.GUEST;
+        return Reason.of(action);
+    }
+
+    /**
+     * Может ли жидкость, огонь или поршень перейти из чанка {@code from} в чанк {@code to}: в тот же чанк и на ничью землю
+     * всегда, на землю другой команды (в том числе со свободной) только если сервер это разрешил ({@code allowed}).
+     */
+    public boolean mayCross(String dim, long from, long to, boolean allowed) {
+        if (from == to || allowed || !settings.get().protection) return true;
+        UUID target = data.owner(dim, to);
+        return target == null || target.equals(data.owner(dim, from));
+    }
+
+    /**
+     * Взрыв без хозяина ломает блок чанка {@code chunk}, если его центр в чанке {@code center}: ничья земля всегда; иначе по
+     * настройке сервера, при «свои» только земля той же команды, что центр, и с переключателем «Свои взрывы ломают блоки».
+     */
+    public boolean ownerlessExplosion(String dim, long center, long chunk) {
+        Settings s = settings.get();
+        if (!s.protection) return true;
+        UUID owner = data.owner(dim, chunk);
+        if (owner == null) return true;
+        return switch (s.ownerless) {
+            case ALWAYS -> true;
+            case NEVER -> false;
+            case OWN -> {
+                TeamLand land = data.land(owner);
+                yield owner.equals(data.owner(dim, center)) && land != null && land.flag(TeamLand.Flag.OWN_EXPLOSIONS);
+            }
+        };
     }
 
     // ---- события команд ----

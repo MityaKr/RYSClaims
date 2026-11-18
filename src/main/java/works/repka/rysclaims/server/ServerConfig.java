@@ -14,8 +14,9 @@ import works.repka.rysclaims.data.Settings;
 public final class ServerConfig {
     public static final ModConfigSpec SPEC;
 
-    private static final ModConfigSpec.IntValue CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE;
-    private static final ModConfigSpec.ConfigValue<String> BONUS_MODE, MAX_LOAD, ALLY_MODE, PVP_MODE;
+    private static final ModConfigSpec.IntValue CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, LOG_DAYS;
+    private static final ModConfigSpec.ConfigValue<String> BONUS_MODE, MAX_LOAD, ALLY_MODE, PVP_MODE, OWNERLESS;
+    private static final ModConfigSpec.BooleanValue FLUIDS, FIRE, PISTONS;
     private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED, ONLY, NO_WILD_DIMS;
     private static final ModConfigSpec.BooleanValue ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS;
     private static final ModConfigSpec.ConfigValue<String> DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY;
@@ -56,6 +57,15 @@ public final class ServerConfig {
         NO_WILD_DIMS = b.comment("Unclaimed land: building is not allowed in these dimensions (overrides noWilderness)")
             .defineListAllowEmpty("noWildernessDimensions", List.of(), () -> "mod:dimension", o -> o instanceof String);
         EDIT_RIGHTS = b.comment("Teams may change their own rights and switches").define("teamsEditRights", true);
+        LOG_DAYS = b.comment("Days the log of denied attempts keeps its lines").defineInRange("logDays", 7, 1, 365);
+        b.pop();
+
+        b.push("borders");
+        FLUIDS = b.comment("Water and lava may flow onto another team's land (from other land or unclaimed land)").define("fluidsAcrossBorders", false);
+        FIRE = b.comment("Fire and lightning fire may spread onto another team's land").define("fireAcrossBorders", false);
+        PISTONS = b.comment("Pistons may move blocks across the border of land").define("pistonsAcrossBorders", false);
+        OWNERLESS = b.comment("Explosions without an owner (redstone TNT, beds, end crystals, cannon shells): own (only on the land where they go off and only with the team switch), never, always")
+            .define("ownerlessExplosions", "own", o -> o instanceof String s && Settings.Ownerless.parse(s, null) != null);
         b.pop();
 
         b.push("newTeams");
@@ -103,6 +113,11 @@ public final class ServerConfig {
             s.noWilderness = NO_WILD.get();
             s.noWildernessDimensions = new LinkedHashSet<>(NO_WILD_DIMS.get());
             s.teamsEditRights = EDIT_RIGHTS.get();
+            s.logDays = LOG_DAYS.get();
+            s.fluidsCross = FLUIDS.get();
+            s.fireCross = FIRE.get();
+            s.pistonsCross = PISTONS.get();
+            s.ownerless = Settings.Ownerless.parse(OWNERLESS.get(), Settings.Ownerless.OWN);
             Rights r = new Rights();
             r.set(Rights.Action.BUILD, preset(DEF_BUILD));
             r.set(Rights.Action.OPEN, preset(DEF_OPEN));
@@ -116,7 +131,8 @@ public final class ServerConfig {
 
     private static List<ModConfigSpec.ConfigValue<?>> all() {
         return List.of(CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, BONUS_MODE, MAX_LOAD, ALLY_MODE,
-            PVP_MODE, DISABLED, ONLY, NO_WILD_DIMS, ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS, DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY);
+            PVP_MODE, DISABLED, ONLY, NO_WILD_DIMS, ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS, DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY,
+            LOG_DAYS, FLUIDS, FIRE, PISTONS, OWNERLESS);
     }
 
     /**
@@ -150,6 +166,11 @@ public final class ServerConfig {
         NO_WILD.set(s.noWilderness);
         NO_WILD_DIMS.set(List.copyOf(s.noWildernessDimensions));
         EDIT_RIGHTS.set(s.teamsEditRights);
+        LOG_DAYS.set(s.logDays);
+        FLUIDS.set(s.fluidsCross);
+        FIRE.set(s.fireCross);
+        PISTONS.set(s.pistonsCross);
+        OWNERLESS.set(s.ownerless.key());
         DEF_BUILD.set(s.defaultRights.presetOf(Rights.Action.BUILD).key());
         DEF_OPEN.set(s.defaultRights.presetOf(Rights.Action.OPEN).key());
         DEF_USE.set(s.defaultRights.presetOf(Rights.Action.USE).key());

@@ -30,7 +30,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.neoforged.bus.api.Event;
 import net.neoforged.bus.api.EventPriority;
+import net.neoforged.bus.api.ICancellableEvent;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.common.util.TriState;
@@ -45,18 +47,22 @@ import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.level.PistonEvent;
 import org.jetbrains.annotations.Nullable;
 import works.repka.rysclaims.RYSClaims;
+import works.repka.rysclaims.compat.sable.SableLand;
 import works.repka.rysclaims.data.Chunks;
+import works.repka.rysclaims.net.ClaimsNet;
 import works.repka.rysclaims.data.Rights;
 import works.repka.rysclaims.data.Settings;
 import works.repka.rysclaims.data.TeamLand;
 
 /**
- * Защита событиями NeoForge (план, раздел 11, строки 1–6, 8–18, 29). Одна проверка {@link ClaimService#can} для игроков и
+ * Защита событиями NeoForge (план, раздел 11, строки 1–6, 8–20, 29). Одна проверка {@link ClaimService#can} для игроков и
  * {@link ClaimService#canMachine} для фейковых игроков: место фейкового игрока не доверяем (R0: спавн, под миром, чужая
  * машина), машина судится профилем, списком имён команды и переключателем «Машины снаружи».
  *
  * <p>Каждый обработчик сначала выходит дёшево: сервер земли не запущен, в измерении нет земли (и свободная земля открыта).
- * Перехваты жидкости, огня, молнии (строки 19, 20) и Create, Sable идут следующими частями.
+ * Жидкость, огонь и молния без игрока живут в {@link Borders} (перехваты {@code mixin/}), машины мимо событий в
+ * {@link Machines}. Каждый отказ игроку или машине уходит в {@link DenyLog} хозяев земли и, игроку, пакетом
+ * {@link ClaimsNet.Denied} (или строкой над хотбаром, если у клиента нет канала).
  */
 public final class Protection {
     public static final TagKey<Block> USE = TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(RYSClaims.MODID, "use"));
@@ -93,6 +99,49 @@ public final class Protection {
             if (!mobMayGrief(e.getEntity(), e.getEntity().level(), e.getPos())) e.setCanceled(true);
         });
         bus.addListener(EventPriority.HIGH, PistonEvent.Pre.class, Protection::onPiston);
+        bus.addListener(EventPriority.HIGH, BlockEvent.FluidPlaceBlockEvent.class, Protection::onFluidPlace);
+        cannons(bus);
+    }
+
+    /**
+     * Create Big Cannons: своё отменяемое событие {@code ProjectileDamageEvent(level, pos)} перед порчей блока снарядом и
+     * взрывом снаряда (R0, раздел 2; позиция уже переведена из постройки Sable в мир). Хозяина в событии нет: на земле
+     * команды это взрыв без хозяина, а центр неизвестен, поэтому ломать можно только при настройке «всегда». Без CBC ничего
+     * не регистрируется: класс ищется по имени.
+     */
+    @SuppressWarnings("unchecked")
+    private static void cannons(IEventBus bus) {
+        Class<Event> type;
+        java.lang.reflect.Method getLevel, getPos;
+        try {
+            type = (Class<Event>) Class.forName("rbasamoyai.createbigcannons.events.ProjectileDamageEvent");
+            getLevel = type.getMethod("getLevel");
+            getPos = type.getMethod("getPos");
+        } catch (ReflectiveOperationException | LinkageError e) {
+            return;
+        }
+        bus.addListener(EventPriority.HIGH, false, type, e -> {
+            try {
+                if (e instanceof ICancellableEvent c && getLevel.invoke(e) instanceof Level level && getPos.invoke(e) instanceof BlockPos pos
+                    && !cannonMay(level, pos)) {
+                    c.setCanceled(true);
+                }
+            } catch (ReflectiveOperationException ignored) {
+                // другой CBC: событие не трогаем
+            }
+        });
+        RYSClaims.LOG.info("RYSClaims: защита от снарядов Create Big Cannons включена");
+    }
+
+    /** Снаряд без хозяина ломает блок: ничья земля всегда, земля команды только при настройке «всегда». */
+    public static boolean cannonMay(Level level, BlockPos pos) {
+        ClaimService s = service(level);
+        if (s == null || !s.settings().protection) return true;
+        String dim = Loader.id(level.dimension());
+        if (!s.data().anyIn(dim)) return true;
+        BlockPos w = SableLand.toWorld(level, pos);
+        if (s.data().owner(dim, Chunks.pack(w.getX() >> 4, w.getZ() >> 4)) == null) return true;
+        return s.settings().ownerless == Settings.Ownerless.ALWAYS;
     }
 
     // ---- общая проверка ----
@@ -113,10 +162,26 @@ public final class Protection {
         ClaimService s = service(level);
         if (s == null) return true;
         String dim = Loader.id(level.dimension());
+        BlockPos world = SableLand.toWorld(level, pos);
+        if (world != pos && homeAllows(s, level, pos, player)) return true;
         if (!relevant(s, dim)) return true;
-        long chunk = Chunks.pack(pos.getX() >> 4, pos.getZ() >> 4);
+        long chunk = Chunks.pack(world.getX() >> 4, world.getZ() >> 4);
         if (player instanceof FakePlayer fake) return machine(s, fake, dim, chunk, action);
         return s.can(player.getUUID(), dim, chunk, action);
+    }
+
+    /**
+     * Блок постройки Sable: игрок команды-дома может всё (план, раздел 11, строка 34), машина с профилем участника дома
+     * тоже. Иначе решают права земли под постройкой.
+     */
+    private static boolean homeAllows(ClaimService s, Level level, BlockPos pos, Player player) {
+        UUID home = SableLand.home(level, pos);
+        if (home == null) return false;
+        if (player instanceof FakePlayer) {
+            TeamLand land = s.data().land(home);
+            if (land != null && !land.flag(TeamLand.Flag.MACHINES_PROFILE)) return false;
+        }
+        return s.relation(player.getUUID(), home) == Rights.Relation.TEAM;
     }
 
     /** Фейковый игрок: список имён команды, затем профиль и «Машины снаружи». Место не доверяем. */
@@ -128,24 +193,66 @@ public final class Protection {
         return s.canMachine(dim, Long.MIN_VALUE, fake.getUUID(), chunk, action);
     }
 
-    private static void deny(@Nullable Player player, Rights.Action action) {
-        if (!(player instanceof ServerPlayer sp) || player instanceof FakePlayer) return;
+    /** Отказ: в журнал хозяев земли и, живому игроку, причина не чаще раза в секунду. */
+    private static void deny(@Nullable Player player, Level level, BlockPos pos, Rights.Action action) {
+        if (player == null) return;
+        ClaimService s = service(level);
+        if (s == null) return;
+        String dim = Loader.id(level.dimension());
+        BlockPos world = SableLand.toWorld(level, pos);
+        long chunk = Chunks.pack(world.getX() >> 4, world.getZ() >> 4);
+        boolean fake = player instanceof FakePlayer;
+        ClaimService.Reason reason = fake ? ClaimService.Reason.MACHINE : s.reason(player.getUUID(), dim, chunk, action);
+        if (reason == ClaimService.Reason.GUEST && action != Rights.Action.BUILD) reason = ClaimService.Reason.of(action);
+        UUID owner = s.data().owner(dim, chunk);
+        if (owner != null) {
+            DenyLog log = ClaimsServer.log();
+            if (log != null) log.add(owner, player.getUUID(), player.getGameProfile().getName(), fake, reason, dim, world.getX(), world.getY(), world.getZ());
+        }
+        if (!fake && player instanceof ServerPlayer sp) feedback(s, sp, reason, owner);
+    }
+
+    /** Причина у прицела (пакет {@code Denied}) или строкой над хотбаром, если у клиента нет канала. */
+    static void feedback(ClaimService s, ServerPlayer sp, ClaimService.Reason reason, @Nullable UUID owner) {
         long now = System.currentTimeMillis();
         Long last = LAST_DENY.get(sp.getUUID());
         if (last != null && now - last < 1000) return;
         LAST_DENY.put(sp.getUUID(), now);
-        Component text = switch (action) {
-            case BUILD -> Msg.t("deny.build", "You cannot build here");
-            case OPEN -> Msg.t("deny.open", "You cannot open this here");
-            case USE -> Msg.t("deny.use", "You cannot use this here");
-            case ENTITY -> Msg.t("deny.entity", "You cannot touch this here");
+        if (ClaimsNet.accepts(sp)) {
+            ClaimsNet.denied(sp, reason.key(), owner == null ? "" : ownerName(s, sp.getUUID(), owner));
+            return;
+        }
+        sp.displayClientMessage(Msg.t("deny." + reason.key(), fallback(reason)), true);
+    }
+
+    /** Имя хозяина для игрока: скрытая земля уходит чужому без имени (план, раздел 9.2, «Скрытая земля»). */
+    static String ownerName(ClaimService s, UUID viewer, UUID owner) {
+        TeamLand land = s.data().land(owner);
+        Rights.Relation rel = s.relation(viewer, owner);
+        if (land != null) {
+            if (land.visibility == TeamLand.Visibility.TEAM && rel != Rights.Relation.TEAM) return "";
+            if (land.visibility == TeamLand.Visibility.ALLIES && rel == Rights.Relation.OTHER) return "";
+        }
+        return Commands.teamName(s, owner).getString();
+    }
+
+    static String fallback(ClaimService.Reason reason) {
+        return switch (reason) {
+            case BUILD -> "You cannot build here";
+            case OPEN -> "You cannot open this here";
+            case USE -> "You cannot use this here";
+            case ENTITY -> "You cannot touch this here";
+            case FLUID -> "You cannot pour fluids here";
+            case PVP -> "Combat is off here";
+            case GUEST -> "Guests do not build here";
+            case WILDERNESS -> "You can build only on your land";
+            case MACHINE -> "Machines are not allowed here";
         };
-        sp.displayClientMessage(text, true);
     }
 
     private static boolean check(@Nullable Player player, Level level, BlockPos pos, Rights.Action action) {
         if (allowed(player, level, pos, action)) return true;
-        deny(player, action);
+        deny(player, level, pos, action);
         return false;
     }
 
@@ -156,7 +263,12 @@ public final class Protection {
     }
 
     private static void onPlace(BlockEvent.EntityPlaceEvent e) {
-        if (!(e.getEntity() instanceof Player p) || !(e.getLevel() instanceof Level level)) return;
+        if (!(e.getLevel() instanceof Level level)) return;
+        if (!(e.getEntity() instanceof Player p)) {
+            // эндермен ставит блок: как порча блоков мобом
+            if (e.getEntity() instanceof Enemy && !mobMayGrief(e.getEntity(), level, e.getPos())) e.setCanceled(true);
+            return;
+        }
         if (e instanceof BlockEvent.EntityMultiPlaceEvent multi) {
             for (var snap : multi.getReplacedBlockSnapshots()) {
                 if (!check(p, level, snap.getPos(), Rights.Action.BUILD)) {
@@ -250,7 +362,10 @@ public final class Protection {
         String dim = Loader.id(victim.level().dimension());
         if (!s.data().anyIn(dim)) return;
         if (victim instanceof Player) {
-            if (attacker != victim && !pvpAllowed(s, dim, attacker, victim)) e.setCanceled(true);
+            if (attacker != victim && !pvpAllowed(s, dim, attacker, victim)) {
+                e.setCanceled(true);
+                if (attacker instanceof ServerPlayer sp && !(attacker instanceof FakePlayer)) feedback(s, sp, ClaimService.Reason.PVP, null);
+            }
             return;
         }
         if (!entityAllowed(attacker, victim)) e.setCanceled(true);
@@ -302,15 +417,15 @@ public final class Protection {
         Entity direct = ex.getDirectSourceEntity();
         Player player = indirect instanceof Player p ? p : null;
         boolean mob = player == null && (indirect instanceof Mob || direct instanceof Mob);
-        Entity mobEntity = indirect instanceof Mob ? indirect : direct;
-        var c = ex.center();
-        UUID centerOwner = s.data().owner(dim, Chunks.pack(((int) Math.floor(c.x)) >> 4, ((int) Math.floor(c.z)) >> 4));
+        BlockPos cpos = SableLand.toWorld(level, BlockPos.containing(ex.center()));
+        long center = Chunks.pack(cpos.getX() >> 4, cpos.getZ() >> 4);
         Map<Long, Boolean> byChunk = new HashMap<>();
         Iterator<BlockPos> it = e.getAffectedBlocks().iterator();
         while (it.hasNext()) {
             BlockPos pos = it.next();
-            long chunk = Chunks.pack(pos.getX() >> 4, pos.getZ() >> 4);
-            boolean ok = byChunk.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, mobEntity, centerOwner, Rights.Action.BUILD));
+            BlockPos w = SableLand.toWorld(level, pos);
+            long chunk = Chunks.pack(w.getX() >> 4, w.getZ() >> 4);
+            boolean ok = byChunk.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, center, Rights.Action.BUILD));
             if (!ok) it.remove();
         }
         Map<Long, Boolean> byChunkEntity = new HashMap<>();
@@ -319,34 +434,35 @@ public final class Protection {
             Entity target = ents.next();
             if (target instanceof Player || target instanceof Enemy) continue;
             long chunk = Chunks.pack(target.getBlockX() >> 4, target.getBlockZ() >> 4);
-            boolean ok = byChunkEntity.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, mobEntity, centerOwner, Rights.Action.ENTITY));
+            boolean ok = byChunkEntity.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, center, Rights.Action.ENTITY));
             if (!ok) ents.remove();
         }
     }
 
-    private static boolean explosionMay(ClaimService s, String dim, long chunk, @Nullable Player player, boolean mob,
-                                        @Nullable Entity mobEntity, @Nullable UUID centerOwner, Rights.Action action) {
+    private static boolean explosionMay(ClaimService s, String dim, long chunk, @Nullable Player player, boolean mob, long center,
+                                        Rights.Action action) {
         UUID owner = s.data().owner(dim, chunk);
-        if (owner == null) return true;
+        if (owner == null || !s.settings().protection) return true;
         TeamLand land = s.data().land(owner);
         if (player != null) {
             if (player instanceof FakePlayer fake) return machine(s, fake, dim, chunk, action);
             return s.can(player.getUUID(), dim, chunk, action);
         }
         if (mob) return land != null && land.flag(TeamLand.Flag.MOB_GRIEF);
-        return owner.equals(centerOwner) && land != null && land.flag(TeamLand.Flag.OWN_EXPLOSIONS);
+        return s.ownerlessExplosion(dim, center, chunk);
     }
 
     // ---- мобы ----
 
     /** Порчу блоков мобами судит земля; без земли решает игра. Мирные мобы (овцы, жители, големы) не трогаются. */
-    static boolean mobMayGrief(@Nullable Entity entity, Level level, BlockPos pos) {
+    public static boolean mobMayGrief(@Nullable Entity entity, Level level, BlockPos pos) {
         if (entity == null || entity instanceof Player) return true;
         ClaimService s = service(level);
         if (s == null) return true;
         String dim = Loader.id(level.dimension());
-        if (!s.data().anyIn(dim)) return true;
-        UUID owner = s.data().owner(dim, Chunks.pack(pos.getX() >> 4, pos.getZ() >> 4));
+        if (!s.data().anyIn(dim) || !s.settings().protection) return true;
+        BlockPos w = SableLand.toWorld(level, pos);
+        UUID owner = s.data().owner(dim, Chunks.pack(w.getX() >> 4, w.getZ() >> 4));
         if (owner == null) return true;
         TeamLand land = s.data().land(owner);
         return land != null && land.flag(TeamLand.Flag.MOB_GRIEF);
@@ -366,7 +482,7 @@ public final class Protection {
         ClaimService s = service(level);
         if (s == null) return;
         String dim = Loader.id(level.dimension());
-        if (!s.data().anyIn(dim)) return;
+        if (!s.data().anyIn(dim) || s.settings().pistonsCross || !s.settings().protection) return;
         BlockPos piston = e.getPos();
         UUID pistonOwner = s.data().owner(dim, Chunks.pack(piston.getX() >> 4, piston.getZ() >> 4));
         if (!nearOtherLand(s, dim, piston, pistonOwner)) return;
@@ -402,6 +518,22 @@ public final class Protection {
     private static boolean foreign(ClaimService s, String dim, BlockPos pos, @Nullable UUID pistonOwner) {
         UUID o = s.data().owner(dim, Chunks.pack(pos.getX() >> 4, pos.getZ() >> 4));
         return o != null && !o.equals(pistonOwner);
+    }
+
+    // ---- жидкость ставит блок ----
+
+    /**
+     * Лава поджигает соседний блок, вода и лава дают камень и обсидиан ({@code FluidPlaceBlockEvent}): на землю другой
+     * команды, чем жидкость, только с настройкой сервера (огонь по настройке огня). Событие не отменяется, поэтому блок
+     * остаётся прежним.
+     */
+    private static void onFluidPlace(BlockEvent.FluidPlaceBlockEvent e) {
+        BlockPos pos = e.getPos(), from = e.getLiquidPos();
+        if (((pos.getX() ^ from.getX()) >> 4) == 0 && ((pos.getZ() ^ from.getZ()) >> 4) == 0) return;
+        if (!(e.getLevel() instanceof Level level)) return;
+        boolean fire = e.getNewState().getBlock() instanceof net.minecraft.world.level.block.BaseFireBlock;
+        boolean ok = fire ? Borders.fire(level, from, pos) : Borders.fluid(level, from, pos);
+        if (!ok) e.setNewState(e.getOriginalState());
     }
 
     public static void clear() {

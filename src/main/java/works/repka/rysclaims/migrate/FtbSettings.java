@@ -32,6 +32,13 @@ public final class FtbSettings {
         s.pvpMode = Settings.PvpMode.parse(Snbt.string(cfg, "pvp_mode", "always"), s.pvpMode);
         s.noWilderness = Snbt.bool(cfg, "no_wilderness", s.noWilderness);
         for (JsonElement e : Snbt.array(cfg, "no_wilderness_dimensions")) s.noWildernessDimensions.add(e.getAsString());
+        // защита FTB «включена» значит у нас «через границу нельзя». Жидкости как в FTB (план 11: в RepYS они текут);
+        // огонь через границу не переходит и после переноса (план 11, таблица настроек), fire_spread_protection не берём
+        if (cfg.has("flowing_fluid_protection")) s.fluidsCross = !Snbt.bool(cfg, "flowing_fluid_protection", true);
+        if (cfg.has("piston_protection")) s.pistonsCross = !Snbt.bool(cfg, "piston_protection", true);
+        if (cfg.has("protect_unknown_explosions") && !Snbt.bool(cfg, "protect_unknown_explosions", true)) s.ownerless = Settings.Ownerless.ALWAYS;
+        int days = Snbt.integer(Snbt.object(cfg, "fake_players"), "max_prevented_log_age", s.logDays);
+        if (days > 0) s.logDays = days;
         JsonObject defs = Snbt.object(cfg, "team_prop_defaults");
         if (!defs.entrySet().isEmpty()) {
             Rights r = s.defaultRights.copy();

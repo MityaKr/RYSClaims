@@ -42,6 +42,7 @@ public final class RYSClaims {
         modBus.addListener((ModConfigEvent.Loading e) -> ServerConfig.invalidate());
         modBus.addListener((ModConfigEvent.Reloading e) -> ServerConfig.invalidate());
         modBus.addListener(Loader::register);
+        modBus.addListener(works.repka.rysclaims.net.ClaimsNet::register);
 
         // права управления землёй живут в таблице прав RYSTeams (решение 18 плана); без RYSTeams игрок соло и может всё
         TeamsApi teams = TeamsApi.get();

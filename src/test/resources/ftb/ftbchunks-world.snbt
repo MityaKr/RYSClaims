@@ -2,6 +2,8 @@
 {
 	ally_mode: "default"
 	disable_protection: false
+	fire_spread_protection: false
+	flowing_fluid_protection: false
 	no_wilderness: false
 	no_wilderness_dimensions: [ ]
 	piston_protection: true

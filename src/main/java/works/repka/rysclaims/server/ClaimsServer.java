@@ -3,8 +3,12 @@ package works.repka.rysclaims.server;
 import it.unimi.dsi.fastutil.longs.LongList;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.LevelResource;
 import org.jetbrains.annotations.Nullable;
 import works.repka.ryscore.claims.ClaimsApi;
 import works.repka.rysclaims.RYSClaims;
@@ -16,8 +20,12 @@ public final class ClaimsServer {
     private static @Nullable MinecraftServer server;
     private static @Nullable ClaimSavedData saved;
     private static @Nullable ClaimService service;
+    private static @Nullable DenyLog log;
+    private static @Nullable ExecutorService logWriter;
     private static boolean loaderDirty;
     private static int ticks;
+    /** Журнал уходит в файл раз в минуту, чистится раз в сутки. */
+    private static final int LOG_FLUSH_TICKS = 1200, LOG_PRUNE_TICKS = 20 * 60 * 60 * 24;
 
     private ClaimsServer() {}
 
@@ -28,6 +36,13 @@ public final class ClaimsServer {
         saved = ClaimSavedData.get(s);
         saved.data().defaults(ServerConfig.snapshot().defaultRights);
         service = new ClaimService(saved.data(), ServerConfig::snapshot, Teams.api(), System::currentTimeMillis, new Hooks());
+        logWriter = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "RYSClaims log");
+            t.setDaemon(true);
+            return t;
+        });
+        log = new DenyLog(s.getWorldPath(LevelResource.ROOT).resolve("rysclaims").resolve("log"), System::currentTimeMillis, logWriter);
+        log.prune(ServerConfig.snapshot().logDays);
         int removed = Loader.takeRemovedAtStart();
         int changed = Loader.sync(s, service);
         RYSClaims.LOG.info("RYSClaims: чанков {}, команд {}, лишних билетов снято {}, билетов поставлено {}",
@@ -35,10 +50,28 @@ public final class ClaimsServer {
     }
 
     public static void stop() {
+        DenyLog l = log;
+        ExecutorService w = logWriter;
+        log = null;
+        logWriter = null;
+        if (l != null) l.flush();
+        if (w != null) {
+            w.shutdown();
+            try {
+                if (!w.awaitTermination(5, TimeUnit.SECONDS)) RYSClaims.LOG.warn("RYSClaims: журнал отказов не дописан за 5 секунд");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         server = null;
         saved = null;
         service = null;
         Loader.clear();
+    }
+
+    /** Журнал отказов; null, пока сервер не запущен. */
+    public static @Nullable DenyLog log() {
+        return log;
     }
 
     public static boolean running() {
@@ -61,6 +94,11 @@ public final class ClaimsServer {
         if (s == null || srv == null) return;
         ticks++;
         if (ticks % 20 == 0) s.tick();
+        DenyLog l = log;
+        if (l != null) {
+            if (ticks % LOG_FLUSH_TICKS == 0) l.flush();
+            if (ticks % LOG_PRUNE_TICKS == 0) l.prune(s.settings().logDays);
+        }
         if (loaderDirty || ticks % 200 == 0) {
             loaderDirty = false;
             Loader.sync(srv, s);

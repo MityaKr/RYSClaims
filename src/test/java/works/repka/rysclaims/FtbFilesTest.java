@@ -61,6 +61,11 @@ class FtbFilesTest {
         assertTrue(s.disabledDimensions.contains("test:void"));
         assertTrue(s.disabledDimensions.contains("ae2:spatial_storage")); // наши по умолчанию остаются
         assertEquals(Settings.LoadMode.ONLINE, s.maxLoad);
+        // защита FTB от жидкостей выключена: у нас текут; огонь не переносим (план 11), поршни и взрывы как в FTB
+        assertTrue(s.fluidsCross);
+        assertTrue(!s.fireCross);
+        assertTrue(!s.pistonsCross);
+        assertEquals(Settings.Ownerless.OWN, s.ownerless);
         // права новых команд из team_prop_defaults: «животные» по более строгому из interact (allies) и attack (private)
         assertTrue(s.defaultRights.allows(Rights.Action.BUILD, Rights.Relation.ALLY, null));
         assertTrue(s.defaultRights.allows(Rights.Action.OPEN, Rights.Relation.ALLY, null));

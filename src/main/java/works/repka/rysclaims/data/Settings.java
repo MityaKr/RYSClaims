@@ -59,6 +59,20 @@ public final class Settings {
         }
     }
 
+    /** Взрывы без хозяина (ТНТ от редстоуна, кровать, кристалл): только свои на своей земле, никогда, всегда. */
+    public enum Ownerless {
+        OWN, NEVER, ALWAYS;
+
+        public String key() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+
+        public static Ownerless parse(String key, Ownerless fallback) {
+            for (Ownerless m : values()) if (m.key().equalsIgnoreCase(key)) return m;
+            return fallback;
+        }
+    }
+
     /** Бой на земле: везде, решает команда, нигде на участках (FTB {@code pvp_mode}). */
     public enum PvpMode {
         ALWAYS, TEAM, NEVER;
@@ -102,6 +116,17 @@ public final class Settings {
     public Set<String> noWildernessDimensions = new LinkedHashSet<>();
     /** Могут ли команды менять свои права и переключатели. */
     public boolean teamsEditRights = true;
+    // ---- через границу земли ----
+    /** Вода и лава текут с чужой или свободной земли на землю команды. */
+    public boolean fluidsCross = false;
+    /** Огонь и молния переходят на землю другой команды. */
+    public boolean fireCross = false;
+    /** Поршни двигают блоки через границу земли. */
+    public boolean pistonsCross = false;
+    /** Взрывы без хозяина. */
+    public Ownerless ownerless = Ownerless.OWN;
+    /** Сколько дней журнал отказов хранит записи. */
+    public int logDays = 7;
     /** Права новой команды. */
     public Rights defaultRights = defaultRights();
 

@@ -121,12 +121,14 @@ public final class ProtectionGameTests {
         BlockPos block = corner.offset(15, 0, 8);
         BlockPos into = corner.offset(16, 0, 8);
         claim(level, into, UUID.randomUUID());
+        BordersGameTests.force(level, true, piston, into); // иначе поршень в нетикающем чанке не сработает и тест пройдёт впустую
         level.setBlock(block, Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST), 3);
         level.setBlock(piston.west(), Blocks.REDSTONE_BLOCK.defaultBlockState(), 3);
         h.runAfterDelay(6, () -> {
             boolean ok = level.getBlockState(block).is(Blocks.STONE) && !level.getBlockState(into).is(Blocks.STONE);
             free(level, into);
+            BordersGameTests.force(level, false, piston, into);
             if (!ok) h.fail("поршень со свободной земли втолкнул блок на землю команды");
             h.succeed();
         });

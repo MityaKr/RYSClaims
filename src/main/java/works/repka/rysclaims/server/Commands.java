@@ -68,6 +68,9 @@ public final class Commands {
             .then(lit("always").executes(c -> loadMode(c, Settings.LoadMode.ALWAYS))));
         root.then(lit("info").executes(Commands::info));
         root.then(lit("list").executes(c -> list(c, own(c))));
+        root.then(lit("log").executes(c -> log(c, own(c), 1))
+            .then(net.minecraft.commands.Commands.argument("page", IntegerArgumentType.integer(1, 100))
+                .executes(c -> log(c, own(c), IntegerArgumentType.getInteger(c, "page")))));
         root.then(lit("trust").then(net.minecraft.commands.Commands.argument("player", GameProfileArgument.gameProfile())
             .executes(c -> trust(c, true))));
         root.then(lit("untrust").then(net.minecraft.commands.Commands.argument("player", GameProfileArgument.gameProfile())
@@ -134,6 +137,9 @@ public final class Commands {
         team.then(radius("unload", (c, r) -> edit(c, team(c), Op.UNLOAD, r, true)));
         team.then(lit("keep").executes(c -> keep(c, team(c), true)));
         team.then(lit("list").executes(c -> list(c, team(c))));
+        team.then(lit("log").executes(c -> log(c, team(c), 1))
+            .then(net.minecraft.commands.Commands.argument("page", IntegerArgumentType.integer(1, 100))
+                .executes(c -> log(c, team(c), IntegerArgumentType.getInteger(c, "page")))));
         node.then(lit("for").then(team));
         node.then(lit("limit").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.word()).suggests(PLAYERS)
             .then(lit("claims").then(net.minecraft.commands.Commands.argument("n", IntegerArgumentType.integer(-1_000_000, 1_000_000))
@@ -512,6 +518,45 @@ public final class Commands {
         c.getSource().sendSuccess(() -> line, true);
         if (o.report() != null) for (String l : o.report().lines()) c.getSource().sendSuccess(() -> Component.literal("  " + l).withStyle(ChatFormatting.GRAY), false);
         return 1;
+    }
+
+    /** Строк журнала на страницу {@code /claims log}. */
+    private static final int LOG_PAGE = 10;
+
+    /** Журнал отказов команды: кто, что и где пытался сделать на её земле, новые первыми. */
+    private static int log(CommandContext<CommandSourceStack> c, UUID team, int page) throws CommandSyntaxException {
+        ClaimService s = service();
+        CommandSourceStack src = c.getSource();
+        DenyLog log = ClaimsServer.log();
+        if (log == null) throw NOT_RUNNING.create();
+        List<DenyLog.Entry> all = log.recent(team, LOG_PAGE * 100);
+        if (all.isEmpty()) {
+            src.sendSuccess(() -> Msg.t("log.empty", "Nobody tried anything on the land of %s", teamName(s, team)), false);
+            return 0;
+        }
+        int pages = (all.size() + LOG_PAGE - 1) / LOG_PAGE;
+        int p = Math.min(page, pages);
+        src.sendSuccess(() -> Msg.t("log.head", "Denied on the land of %s, page %s of %s", teamName(s, team), p, pages), false);
+        long now = System.currentTimeMillis();
+        for (DenyLog.Entry e : all.subList((p - 1) * LOG_PAGE, Math.min(all.size(), p * LOG_PAGE))) {
+            ClaimService.Reason r = ClaimService.Reason.parse(e.reason());
+            Component what = r == null ? Component.literal(e.reason()) : Msg.t("log.reason." + r.key(), r.key());
+            Component who = e.machine() ? Msg.t("log.machine", "machine %s", e.name()) : Component.literal(e.name());
+            MutableComponent line = Msg.t("log.line", "%s ago: %s, %s at %s %s %s", ago(now - e.last()), who, what, e.x(), e.y(), e.z());
+            if (e.count() > 1) line.append(Msg.t("log.times", " (%s times)", e.count()));
+            if (e.machine() && e.actor() != null) line.append(Component.literal(" " + e.actor()).withStyle(ChatFormatting.DARK_GRAY));
+            src.sendSuccess(() -> line, false);
+        }
+        return all.size();
+    }
+
+    /** Сколько прошло: секунды, минуты, часы или дни. */
+    private static Component ago(long ms) {
+        long sec = Math.max(0, ms / 1000);
+        if (sec < 60) return Msg.t("log.sec", "%s s", sec);
+        if (sec < 3600) return Msg.t("log.min", "%s min", sec / 60);
+        if (sec < 86400) return Msg.t("log.hour", "%s h", sec / 3600);
+        return Msg.t("log.day", "%s d", sec / 86400);
     }
 
     private static int loaded(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
