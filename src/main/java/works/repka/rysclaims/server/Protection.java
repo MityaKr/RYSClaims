@@ -366,7 +366,10 @@ public final class Protection {
         BlockState state = level.getBlockState(pos);
         if (!state.is(FREE)) {
             Rights.Action a = state.is(USE) ? Rights.Action.USE : Rights.Action.OPEN;
-            if (!check(p, level, pos, a)) {
+            // с едой, луком, щитом в руке игрок, скорее всего, применяет предмет, а не блок: блок гасится молча, предмет
+            // применяется отдельным пакетом (перепроверка 18.11, пункт 5)
+            boolean quiet = usesInAir(p.getMainHandItem()) || usesInAir(p.getOffhandItem());
+            if (quiet ? !allowed(p, level, pos, a) : !check(p, level, pos, a)) {
                 // предмет в руке тоже не применяется: и блок, и предмет гасятся
                 e.setCanceled(true);
                 return;
@@ -385,6 +388,17 @@ public final class Protection {
 
     private static boolean buildsWith(ItemStack stack) {
         return !stack.isEmpty() && (stack.getItem() instanceof BlockItem || stack.getItem() instanceof BucketItem || stack.is(BUILD_ITEMS));
+    }
+
+    /**
+     * Предмет, который применяется в воздух: еда, питьё, лук, арбалет, щит, трезубец, подзорная труба, рог, кисть (у них
+     * есть анимация применения), бросаемое (снежок, яйцо, зелье, жемчуг), удочка. Ставящие блоки не в счёт.
+     */
+    public static boolean usesInAir(ItemStack stack) {
+        if (stack.isEmpty() || buildsWith(stack)) return false;
+        net.minecraft.world.item.Item item = stack.getItem();
+        return stack.getUseAnimation() != net.minecraft.world.item.UseAnim.NONE || item instanceof net.minecraft.world.item.ProjectileItem
+            || item instanceof net.minecraft.world.item.EnderpearlItem || item instanceof net.minecraft.world.item.FishingRodItem;
     }
 
     /** Ведро, лодка и прочее, что ставится из {@code use}: событие не знает цели, повторяем луч и проверяем обе позиции. */

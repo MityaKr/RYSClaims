@@ -62,6 +62,7 @@ public final class ClaimsClient {
         works.repka.ryscore.team.TeamCards.registerDetailed(ClaimsClient::card);
         var bus = NeoForge.EVENT_BUS;
         bus.addListener(InputGate::onInput);
+        bus.addListener(InputGate::onRightClickBlock);
         bus.addListener((ClientPlayerNetworkEvent.LoggingOut e) -> {
             DenyFeedback.reset();
             LandCache.reset();

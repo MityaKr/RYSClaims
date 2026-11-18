@@ -40,6 +40,22 @@ import works.repka.rysclaims.server.Protection;
 public final class InputGate {
     private InputGate() {}
 
+    /** Блок, который клиент гасит без замка, чтобы предмет в руке применился (позиция и тик игры). */
+    private static @Nullable BlockPos skipPos;
+    private static long skipTick;
+
+    /**
+     * Клиентский {@code RightClickBlock}: блок, отказ по которому решён в {@link #onInput} в пользу предмета, гасится с
+     * результатом PASS. Тогда {@code Minecraft.startUseItem} идёт дальше и зовёт {@code useItem}: игрок ест, пьёт, натягивает
+     * лук, поднимает щит, бросает жемчуг, глядя на чужой блок (перепроверка 18.11, пункт 5; так было в 0.0.11 и в FTB).
+     */
+    public static void onRightClickBlock(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock e) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!e.getLevel().isClientSide || skipPos == null || mc.level == null || mc.level.getGameTime() != skipTick || !skipPos.equals(e.getPos())) return;
+        e.setCanceled(true);
+        e.setCancellationResult(net.minecraft.world.InteractionResult.PASS);
+    }
+
     public static void onInput(InputEvent.InteractionKeyMappingTriggered e) {
         if (e.isPickBlock() || e.isCanceled()) return;
         Minecraft mc = Minecraft.getInstance();
@@ -54,6 +70,12 @@ public final class InputGate {
                 if (!Graves.own(p, mc.level, bh.getBlockPos())) d = check(dim, bh.getBlockPos(), Rights.Action.BUILD);
             } else {
                 d = useOn(dim, mc, bh, p.getItemInHand(e.getHand()));
+                // отказ по блоку, а в руке еда, лук, щит: блок гасится молча, предмет применяется
+                if (d != null && d.block && (Protection.usesInAir(p.getMainHandItem()) || Protection.usesInAir(p.getOffhandItem()))) {
+                    skipPos = bh.getBlockPos().immutable();
+                    skipTick = mc.level.getGameTime();
+                    return;
+                }
             }
         } else if (hit instanceof EntityHitResult eh && guarded(p, eh.getEntity())) {
             d = check(dim, eh.getEntity().blockPosition(), Rights.Action.ENTITY);
@@ -64,7 +86,16 @@ public final class InputGate {
         DenyFeedback.show(d.reason, d.owner);
     }
 
-    private record Denial(String reason, String owner) {}
+    /** {@code block}: отказ по самому блоку («Открывать», «Двери»), а не по постановке предмета. */
+    private record Denial(String reason, String owner, boolean block) {
+        Denial(String reason, String owner) {
+            this(reason, owner, false);
+        }
+
+        Denial asBlock() {
+            return new Denial(reason, owner, true);
+        }
+    }
 
     /** ПКМ по блоку: то же решение, что {@code Protection.onRightClickBlock}. */
     private static @Nullable Denial useOn(String dim, Minecraft mc, BlockHitResult bh, ItemStack stack) {
@@ -73,7 +104,7 @@ public final class InputGate {
         boolean free = state.is(Protection.FREE);
         if (!free) {
             Denial d = check(dim, pos, state.is(Protection.USE) ? Rights.Action.USE : Rights.Action.OPEN);
-            if (d != null) return d;
+            if (d != null) return d.asBlock();
         }
         // на «свободном» блоке (верстак) сервер гасит только предмет, а блок открывает: такое нажатие гасить нельзя
         if (free || !buildsWith(stack)) return null;
