@@ -524,32 +524,38 @@ public final class ClaimService {
         hooks.dirty();
     }
 
+    /**
+     * Правка прав команды: версия прав и рассылка только если таблица на самом деле изменилась (перепроверка 18.11, пункт
+     * 7: повтор того же набора не будит всех игроков).
+     */
+    private void editRights(UUID team, java.util.function.Consumer<Rights> edit) {
+        Rights r = data.landOrCreate(team).rights;
+        int before = r.bits();
+        edit.accept(r);
+        if (r.bits() != before) accessEdited(team);
+    }
+
     public void applyPreset(UUID team, Rights.Preset preset) {
-        data.landOrCreate(team).rights.apply(preset);
-        accessEdited(team);
+        editRights(team, r -> r.apply(preset));
     }
 
     /** Клетка окна «Права» по столбцу 0.1 (команда, союзники, все), с монотонностью. */
     public void toggleRight(UUID team, Rights.Action a, Rights.Column c, boolean on) {
-        data.landOrCreate(team).rights.toggle(a, c, on);
-        accessEdited(team);
+        editRights(team, r -> r.toggle(a, c, on));
     }
 
     /** Клетка окна по столбцу роли ({@code Rights.COLUMNS}), с монотонностью. */
     public void toggleRole(UUID team, Rights.Action a, String column, boolean on) {
-        data.landOrCreate(team).rights.toggleRole(a, column, on);
-        accessEdited(team);
+        editRights(team, r -> r.toggleRole(a, column, on));
     }
 
     /** Отметка по столбцу таблицы ({@code Rights.COLUMNS} или {@code team}), без монотонности. */
     public void setRight(UUID team, Rights.Action a, String column, boolean on) {
-        data.landOrCreate(team).rights.set(a, column, on);
-        accessEdited(team);
+        editRights(team, r -> r.set(a, column, on));
     }
 
     public void setRights(UUID team, Rights rights) {
-        data.landOrCreate(team).rights.copyFrom(rights);
-        accessEdited(team);
+        editRights(team, r -> r.copyFrom(rights));
     }
 
     /** Меняет переключатель; закреплённый сервером не меняется (false). */

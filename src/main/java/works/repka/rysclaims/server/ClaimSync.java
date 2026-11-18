@@ -360,7 +360,15 @@ public final class ClaimSync {
     }
 
     public static void rights(ServerPlayer player, ClaimsNet.RightsEdit e) {
-        if (!VIEWERS.containsKey(player.getUUID()) || !ClaimsServer.running()) return;
+        Viewer v = VIEWERS.get(player.getUUID());
+        if (v == null || !ClaimsServer.running()) return;
+        // как у Edit и LandEdit (перепроверка 18.11, пункт 7): каждая правка поднимает версию прав и рассылку всем игрокам
+        long sec = System.currentTimeMillis() / 1000;
+        if (v.editSecond != sec) {
+            v.editSecond = sec;
+            v.edits = 0;
+        }
+        if (++v.edits > EDITS_PER_SECOND) return;
         ClaimService s = ClaimsServer.service();
         UUID id = player.getUUID();
         UUID team = s.teams().teamOf(id);
@@ -371,6 +379,7 @@ public final class ClaimSync {
             return;
         }
         Rights.Action[] actions = Rights.Action.values();
+        int before = rightsBits(s, team);
         switch (e.kind()) {
             case ClaimsNet.RIGHTS_CELL -> {
                 if (e.action() < 0 || e.action() >= actions.length || e.column() < 0 || e.column() >= Rights.Column.values().length) return;
@@ -389,9 +398,15 @@ public final class ClaimSync {
                 return;
             }
         }
-        touch(team);
+        // права не изменились (повтор того же набора): версия прав не растёт, рассылки нет
+        if (rightsBits(s, team) != before) touch(team);
         r.done = 1;
         ClaimsNet.send(player, new ClaimsNet.EditResult(ClaimsNet.OP_RIGHTS, 1, skipped(r)));
+    }
+
+    private static int rightsBits(ClaimService s, UUID team) {
+        works.repka.rysclaims.data.TeamLand land = s.data().land(team);
+        return land == null || land.rights == null ? Integer.MIN_VALUE : land.rights.bits();
     }
 
     /** Правка земли своей команды из окна: доверенные, переключатели, видимость, участки. Каждая проверяет право заново. */
