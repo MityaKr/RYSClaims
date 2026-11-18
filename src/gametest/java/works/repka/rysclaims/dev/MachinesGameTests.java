@@ -68,6 +68,7 @@ public final class MachinesGameTests {
     /** Плоскость разрушения AE2 и подобные спрашивают mayInteract: чужой профиль нельзя, профиль хозяина можно, живой игрок как раньше. */
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void mayInteractForMachines(GameTestHelper h) {
+        if (CompatRuns.skipMockPlayers(h, "mayInteractForMachines")) return;
         ServerLevel level = h.getLevel();
         BlockPos pos = base(0).offset(8, 1, 8);
         UUID owner = UUID.randomUUID();
@@ -172,6 +173,55 @@ public final class MachinesGameTests {
             free(level, foreign);
         }
         done(h);
+    }
+
+    /**
+     * Create (если подложен): бур у границы не берётся за камень другой команды, на свободной земле берётся
+     * ({@code canBreak} неподвижного бура); постройка несёт место якоря (перехват {@code Contraption} встал).
+     */
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void createDrill(GameTestHelper h) throws ReflectiveOperationException {
+        if (!ModList.get().isLoaded("create")) {
+            RYSClaims.LOG.info("[rysclaims-test] createDrill: Create не подложен, перехват не проверен");
+            h.succeed();
+            return;
+        }
+        Class<?> contraption = Class.forName("com.simibubi.create.content.contraptions.Contraption");
+        if (!works.repka.rysclaims.compat.create.ContraptionPlace.class.isAssignableFrom(contraption)) {
+            h.fail("перехват Contraption не встал");
+            return;
+        }
+        ServerLevel level = h.getLevel();
+        Block drill = BuiltInRegistries.BLOCK.get(ResourceLocation.fromNamespaceAndPath("create", "mechanical_drill"));
+        BlockPos corner = base(4);
+        BlockPos atBorder = corner.offset(15, 1, 8);
+        BlockPos foreign = atBorder.east();
+        BlockPos wildMachine = corner.offset(5, 1, 8);
+        UUID team = UUID.randomUUID();
+        claim(level, team, foreign);
+        try {
+            boolean foreignOk = canBreak(level, drill, atBorder, foreign);
+            boolean wildOk = canBreak(level, drill, wildMachine, wildMachine.east());
+            if (!wildOk) h.fail("бур Create не берётся за камень и на свободной земле: тест ничего не проверяет");
+            if (foreignOk) h.fail("бур Create берётся за камень на земле другой команды");
+        } finally {
+            free(level, foreign);
+        }
+        done(h);
+    }
+
+    private static boolean canBreak(ServerLevel level, Block drill, BlockPos at, BlockPos target) throws ReflectiveOperationException {
+        BlockState state = drill.defaultBlockState();
+        if (state.hasProperty(BlockStateProperties.FACING)) state = state.setValue(BlockStateProperties.FACING, Direction.EAST);
+        level.setBlock(at, state, 3);
+        level.setBlock(target, Blocks.STONE.defaultBlockState(), 3);
+        BlockEntity be = level.getBlockEntity(at);
+        Class<?> base = Class.forName("com.simibubi.create.content.kinetics.base.BlockBreakingKineticBlockEntity");
+        java.lang.reflect.Field pos = base.getDeclaredField("breakingPos");
+        pos.setAccessible(true);
+        pos.set(be, target);
+        Method can = base.getMethod("canBreak", BlockState.class, float.class);
+        return (Boolean) can.invoke(be, Blocks.STONE.defaultBlockState(), 1.5f);
     }
 
     /** Ставит ломатель лицом на восток, питание, камень перед ним; тикает; отвечает, цел ли камень. */

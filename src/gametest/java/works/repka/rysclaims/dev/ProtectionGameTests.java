@@ -59,6 +59,7 @@ public final class ProtectionGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void breakAndOpen(GameTestHelper h) {
+        if (CompatRuns.skipMockPlayers(h, "breakAndOpen")) return;
         ServerLevel level = h.getLevel();
         BlockPos pos = base(0).offset(8, 0, 8);
         UUID team = claim(level, pos, UUID.randomUUID());

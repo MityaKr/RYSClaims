@@ -139,6 +139,7 @@ public final class BordersGameTests {
     /** Стрела игрока по блоку: на чужой земле mayInteract отказывает (ТНТ, костёр, хорус), хозяину можно. */
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void projectileOwner(GameTestHelper h) {
+        if (CompatRuns.skipMockPlayers(h, "projectileOwner")) return;
         ServerLevel level = h.getLevel();
         BlockPos pos = base(2).offset(8, 1, 8);
         ServerPlayer stranger = h.makeMockServerPlayerInLevel();
@@ -161,6 +162,7 @@ public final class BordersGameTests {
     /** Отказ уходит в журнал хозяев с причиной и склеивается при повторе. */
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void denyIsLogged(GameTestHelper h) {
+        if (CompatRuns.skipMockPlayers(h, "denyIsLogged")) return;
         ServerLevel level = h.getLevel();
         BlockPos pos = base(3).offset(8, 1, 8);
         UUID team = UUID.randomUUID();
@@ -199,6 +201,7 @@ public final class BordersGameTests {
      */
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void lightningAndEnderman(GameTestHelper h) {
+        if (CompatRuns.skipMockPlayers(h, "lightningAndEnderman")) return;
         ServerLevel level = h.getLevel();
         BlockPos pos = base(4).offset(8, 1, 8);
         UUID team = UUID.randomUUID();

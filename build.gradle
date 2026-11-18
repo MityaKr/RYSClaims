@@ -75,11 +75,11 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-// Перехваты чужих модов в GameTest: -PcompatMods=<папка с jar модов> (Cyclic и flib из сервера RepYS, только чтение).
+// Перехваты чужих модов в GameTest: -PcompatMods=<папка с jar модов> (Cyclic, flib и Create из сервера RepYS, только чтение).
 // Без свойства чужие моды не грузятся, а их тесты проходят с пометкой «мода нет».
 if (project.hasProperty('compatMods')) {
     dependencies {
-        runtimeOnly fileTree(dir: project.property('compatMods'), include: ['cyclic-1.21.1-*.jar', 'flib-1.21.1-*.jar'])
+        runtimeOnly fileTree(dir: project.property('compatMods'), include: ['cyclic-1.21.1-*.jar', 'flib-1.21.1-*.jar', 'create-1.21.1-*.jar'])
     }
 }
 

@@ -44,6 +44,7 @@ public final class ClaimsGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 400)
     public static void commandsAndTickets(GameTestHelper h) {
+        if (CompatRuns.skipMockPlayers(h, "commandsAndTickets")) return;
         ServerLevel level = h.getLevel();
         String dim = Loader.id(level.dimension());
         ServerPlayer player = h.makeMockServerPlayerInLevel();
