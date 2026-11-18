@@ -4,6 +4,8 @@
   "key.rysclaims.open": "Земля команды",
   "rysclaims.action.build": "строить",
   "rysclaims.action.entity": "животные и рамки",
+  "rysclaims.action.no_right": "Нет права менять землю команды",
+  "rysclaims.action.none": "Выдели чанки на сетке",
   "rysclaims.action.open": "открывать",
   "rysclaims.action.use": "двери и кнопки",
   "rysclaims.admin.bonus": "Личная добавка %s: чанков %s, прогрузки %s. Лимиты команды теперь %s и %s",

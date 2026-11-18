@@ -4,6 +4,8 @@
   "key.rysclaims.open": "Team land",
   "rysclaims.action.build": "build",
   "rysclaims.action.entity": "animals and frames",
+  "rysclaims.action.no_right": "No right to change the team's land",
+  "rysclaims.action.none": "Select chunks on the grid",
   "rysclaims.action.open": "open",
   "rysclaims.action.use": "doors and buttons",
   "rysclaims.admin.bonus": "Personal bonus of %s: claims %s, force loading %s. Team limits now %s and %s",
