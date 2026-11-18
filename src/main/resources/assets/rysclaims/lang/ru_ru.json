@@ -269,6 +269,8 @@
   "rysclaims.log.what.pvp": "Удар по игроку",
   "rysclaims.log.what.use": "Попытка нажать дверь, кнопку, рычаг",
   "rysclaims.log.what.wilderness": "Попытка строить",
+  "rysclaims.map.mode": "Приват",
+  "rysclaims.map.tab": "Земля",
   "rysclaims.menu.claim": "Занять чанк",
   "rysclaims.merge.fits": "Земля: %s чанков перейдёт команде, лимита хватает",
   "rysclaims.merge.over": "Земля: %s чанков перейдёт команде, сверх лимита %s: лишнее продержится 7 дней, занимать новое нельзя",

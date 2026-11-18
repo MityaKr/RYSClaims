@@ -125,8 +125,8 @@ public final class LandLayer implements MapApi.Layer, MapApi.Areas {
             return out;
         }
         boolean own = h != null && st.team().id().equals(h.team());
-        out.add(own ? Component.translatable(h.solo() ? "rysclaims.tip.own.solo" : "rysclaims.tip.own", st.team().name())
-            : Component.translatable("rysclaims.tip.other", st.team().name()));
+        out.add(own ? Component.translatable(h.solo() ? "rysclaims.tip.own.solo" : "rysclaims.tip.own", shownName(st))
+            : Component.translatable("rysclaims.tip.other", shownName(st)));
         out.add(Component.translatable("rysclaims.tip.chunk", cx, cz));
         out.add(Component.translatable(st.force() ? "rysclaims.tip.force.on" : "rysclaims.tip.force.off"));
         if (st.releasing()) out.add(Component.translatable("rysclaims.tip.releasing"));
@@ -148,7 +148,7 @@ public final class LandLayer implements MapApi.Layer, MapApi.Areas {
         if (st == null) return lastStatus != null && now - lastStatusAt <= STATUS_HOLD_MS ? lastStatus : null;
         ClaimsNet.Hello h = LandCache.hello();
         boolean own = h != null && st.team().id().equals(h.team());
-        Component text = Component.translatable(own ? "rysclaims.status.own" : "rysclaims.status.other", st.team().name());
+        Component text = Component.translatable(own ? "rysclaims.status.own" : "rysclaims.status.other", shownName(st));
         lastStatus = MapApi.Status.of(st.team().color(), Icons.Shape.SHIELD, text);
         lastStatusAt = now;
         return lastStatus;
@@ -157,10 +157,15 @@ public final class LandLayer implements MapApi.Layer, MapApi.Areas {
     private static MapApi.@Nullable Status bypass() {
         ClaimsNet.Hello h = LandCache.hello();
         if (h == null || !h.bypass()) return null;
-        return MapApi.Status.of(LandScreen.deny(works.repka.ryscore.theme.ThemeManager.get()), Icons.Shape.WARN, Component.translatable("rysclaims.status.bypass"));
+        return MapApi.Status.of(LandView.deny(works.repka.ryscore.theme.ThemeManager.get()), Icons.Shape.WARN, Component.translatable("rysclaims.status.bypass"));
     }
 
     public static void reset() {
         lastStatus = null;
+    }
+
+    /** Имя хозяина для подписи: скрытая земля приходит без имени и подписывается «Занято». */
+    static Component shownName(LandCache.ChunkState st) {
+        return st.team().name().isEmpty() ? Component.translatable("rysclaims.screen.taken") : Component.literal(st.team().name());
     }
 }

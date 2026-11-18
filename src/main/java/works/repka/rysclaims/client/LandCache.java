@@ -205,7 +205,7 @@ public final class LandCache {
         result = r;
         resultAt = System.currentTimeMillis();
         // правка клавишей «занять чанк под ногами»: окна нет, итог приходит строкой в колонке тостов
-        if (!(Minecraft.getInstance().screen instanceof LandScreen) && r.op() == ClaimsNet.OP_CLAIM) {
+        if (!(Minecraft.getInstance().screen instanceof LandScreen) && !LandMap.modeOpen() && r.op() == ClaimsNet.OP_CLAIM) {
             Notice n = Notice.row(Notice.CLAIMS, "claim_here").icon(Icons.Shape.SHIELD).title(Words.result(r));
             if (r.done() == 0) n.bad();
             Notices.show(n);

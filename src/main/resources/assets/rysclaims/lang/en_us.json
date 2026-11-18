@@ -269,6 +269,8 @@
   "rysclaims.log.what.pvp": "Hit a player",
   "rysclaims.log.what.use": "Tried a door, button or lever",
   "rysclaims.log.what.wilderness": "Tried to build",
+  "rysclaims.map.mode": "Claims",
+  "rysclaims.map.tab": "Land",
   "rysclaims.menu.claim": "Claim chunk",
   "rysclaims.merge.fits": "Land: %s chunks will go to the team, the limit is enough",
   "rysclaims.merge.over": "Land: %s chunks will go to the team, %s over the limit: the extra land stays 7 days, no new claims",

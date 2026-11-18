@@ -56,6 +56,8 @@ public final class ClaimsClient {
             .label(Component.translatable("rysclaims.dock")).description(() -> Component.translatable("rysclaims.dock.description"))
             .tile(0xFFD9714F).icon(Icons.Shape.SHIELD).key(OPEN).order(21).action(LandScreen::open).register()));
         LandLayer.register();
+        // земля внутри окна карты: режим «Приват» и вкладка «Земля» (З7, ядро 1.12)
+        LandMap.register();
         // сводка «Земля» на экране команды RYSTeams (план, раздел 8, строка «Экран команды»)
         works.repka.ryscore.team.TeamCards.registerDetailed(ClaimsClient::card);
         var bus = NeoForge.EVENT_BUS;
@@ -64,6 +66,7 @@ public final class ClaimsClient {
             DenyFeedback.reset();
             LandCache.reset();
             LandScreen.reset();
+            LandMap.reset();
             LandLayer.reset();
         });
         bus.addListener((ClientTickEvent.Post e) -> {
