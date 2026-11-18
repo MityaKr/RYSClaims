@@ -280,8 +280,11 @@ public final class LandScreen extends ScaledScreen {
 
     private void canvas(GuiGraphics g, Theme t, Theme canvas, ClaimsNet.Hello h, int mx, int my) {
         float r = t.beveled() ? 0 : t.r("panel.radius");
-        Draw.rect(g, cx0 + 1, cy0, cw - 1, ch - 1, canvas.c("map.bg"));
-        Draw.round(g, cx0 + 1, cy0 + ch - 2 * r - 1, 2 * r, 2 * r, r - 1, canvas.c("map.bg"));
+        // левый нижний угол полотна повторяет скругление окна
+        int bg = canvas.c("map.bg"), ri = (int) Math.ceil(r);
+        Draw.rect(g, cx0 + 1, cy0, cw - 1, ch - 1 - ri, bg);
+        Draw.rect(g, cx0 + 1 + ri, cy0 + ch - 1 - ri, cw - 1 - ri, ri, bg);
+        if (ri > 0) Draw.round(g, cx0 + 1, cy0 + ch - 1 - 2 * r, 2 * r, 2 * r, Math.max(0, r - 1), bg);
         boolean tiles = MapApi.get().present() && MapApi.get().drawTiles(g, dimension, centerX, centerZ, ppb(), cx0 + 1, cy0, cw - 1, ch - 1);
         // в режиме привата карта приглушена (план 7.3)
         if (tiles) Draw.rect(g, cx0 + 1, cy0, cw - 1, ch - 1, Draw.alpha(canvas.c("map.bg"), 0.35f));
@@ -841,7 +844,7 @@ public final class LandScreen extends ScaledScreen {
         // набор справа в строке пилюль
         Rights.Preset preset = r.preset();
         String label = preset == null ? Words.t("set.custom") : presetName(preset, h.solo());
-        int dropW = 130;
+        int dropW = Kit.dropdownWidth(label, 130);
         int dx = wx + ww - 14 - dropW;
         String setLabel = Words.t("rights.preset");
         Draw.label(g, setLabel, dx - 6 - Draw.labelWidth(setLabel, 12, Weight.REGULAR), wy + HEADER + 13, 12, Weight.REGULAR, t.c("text.muted"));
@@ -927,7 +930,7 @@ public final class LandScreen extends ScaledScreen {
                 options.add(new Kit.Option(Words.t("set.custom"), "", false));
                 sel = options.size() - 1;
             }
-            Kit.dropdownList(g, t, hits, presetDrop, options, sel, dropW, mx, my, i -> {
+            Kit.dropdownList(g, t, hits, presetDrop, options, sel, 130, mx, my, i -> {
                 presetDrop.close();
                 if (i < Rights.Preset.values().length) presetEdit(h, Rights.Preset.values()[i]);
             });
