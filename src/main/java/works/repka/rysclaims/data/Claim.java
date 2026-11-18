@@ -8,6 +8,9 @@ import org.jetbrains.annotations.Nullable;
  * счётчики команд.
  */
 public final class Claim {
+    /** Где лежит: измерение и упакованный чанк. По ним правка сообщает о себе рассылке. */
+    final String dimension;
+    final long pos;
     final UUID team;
     /** Кто принёс чанк в команду (поле 0.2, в 0.1 пишется, но не используется). */
     final @Nullable UUID by;
@@ -19,10 +22,20 @@ public final class Claim {
     /** Когда освободится, мс от эпохи; 0: не освобождается. */
     long releaseAt;
 
-    Claim(UUID team, @Nullable UUID by, long at) {
+    Claim(String dimension, long pos, UUID team, @Nullable UUID by, long at) {
+        this.dimension = dimension;
+        this.pos = pos;
         this.team = team;
         this.by = by;
         this.at = at;
+    }
+
+    public String dimension() {
+        return dimension;
+    }
+
+    public long pos() {
+        return pos;
     }
 
     public UUID team() {

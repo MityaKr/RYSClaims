@@ -425,6 +425,13 @@ public final class ClaimService {
         if (!s.protection || bypass.contains(player)) return true;
         UUID owner = data.owner(dim, chunk);
         if (owner == null) return !s.wildernessClosed(dim);
+        return allows(player, owner, action);
+    }
+
+    /** Может ли игрок сделать действие на земле команды {@code owner}: то же, что {@link #can}, без поиска чанка (окно, подсказка). */
+    public boolean allows(UUID player, UUID owner, Rights.Action action) {
+        Settings s = settings.get();
+        if (!s.protection || bypass.contains(player)) return true;
         Rights.Relation rel = relation(player, owner);
         TeamLand land = data.land(owner);
         Rights rights = land == null ? s.defaultRights : land.rights;

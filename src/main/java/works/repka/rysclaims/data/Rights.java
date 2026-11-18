@@ -144,6 +144,67 @@ public final class Rights {
         };
     }
 
+    // ---- окно 0.1: три столбца ----
+
+    /** Столбцы окна «Права» в 0.1: команда (офицеры и участники, лидеру можно всё), союзники (с гостями и доверенными), все. */
+    public enum Column { TEAM, ALLIES, ALL }
+
+    /** Что показывает клетка окна: действующее право с учётом монотонности. */
+    public boolean shown(Action a, Column c) {
+        return switch (c) {
+            case TEAM -> allows(a, Relation.TEAM, MEMBER);
+            case ALLIES -> allows(a, Relation.ALLY, null);
+            case ALL -> allows(a, Relation.OTHER, null);
+        };
+    }
+
+    /**
+     * Отметка в окне. Права монотонны, поэтому включённый столбец включает и те, что левее, а снятый снимает те, что правее:
+     * таблица остаётся такой, какой её видно. Снятие «Союзников» снимает и отдельную отметку гостя (в 0.1 гость это союзник).
+     */
+    public void toggle(Action a, Column c, boolean on) {
+        if (on) {
+            set(a, "team", true);
+            if (c != Column.TEAM) set(a, ALLIES, true);
+            if (c == Column.ALL) set(a, ALL, true);
+            return;
+        }
+        set(a, ALL, false);
+        if (c == Column.ALL) return;
+        set(a, ALLIES, false);
+        set(a, GUEST, false);
+        if (c == Column.TEAM) set(a, "team", false);
+    }
+
+    /** Таблица числом для сети: на действие шесть бит в порядке {@link #COLUMNS}. */
+    public int bits() {
+        int out = 0;
+        for (Action a : Action.values()) {
+            for (int i = 0; i < COLUMNS.size(); i++) if (table.get(a).contains(COLUMNS.get(i))) out |= 1 << (a.ordinal() * COLUMNS.size() + i);
+        }
+        return out;
+    }
+
+    /** Таблица из числа {@link #bits()}; лидер отмечен всегда. */
+    public static Rights fromBits(int bits) {
+        Rights r = new Rights();
+        for (Action a : Action.values()) {
+            Set<String> s = r.table.get(a);
+            s.clear();
+            for (int i = 0; i < COLUMNS.size(); i++) if ((bits >> (a.ordinal() * COLUMNS.size() + i) & 1) != 0) s.add(COLUMNS.get(i));
+            s.add(LEADER);
+        }
+        return r;
+    }
+
+    /** Заменяет таблицу другой (возврат прежних прав в окне). */
+    public void copyFrom(Rights other) {
+        for (Action a : Action.values()) {
+            table.get(a).clear();
+            table.get(a).addAll(other.table.get(a));
+        }
+    }
+
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         for (Action a : Action.values()) {

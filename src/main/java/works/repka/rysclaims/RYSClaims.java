@@ -31,7 +31,7 @@ import works.repka.rysclaims.server.Protection;
 import works.repka.rysclaims.server.ServerConfig;
 import works.repka.rysclaims.server.TeamHooks;
 
-/** Точка входа: общая для клиента и сервера. В 0.0.x только серверная часть: земля, лимиты, прогрузка, команды, переезд. */
+/** Точка входа: общая для клиента и сервера. Сервер: земля, лимиты, прогрузка, защита, команды, переезд, рассылка; клиент: окно земли и слой карты. */
 @Mod(RYSClaims.MODID)
 public final class RYSClaims {
     public static final String MODID = "rysclaims";
@@ -71,7 +71,10 @@ public final class RYSClaims {
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent e) -> {
             if (e.getEntity() instanceof ServerPlayer p && !(p instanceof FakePlayer)) ClaimsServer.login(p);
         });
-        NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent e) -> ClaimsServer.loaderDirty());
+        NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent e) -> {
+            ClaimsServer.loaderDirty();
+            works.repka.rysclaims.server.ClaimSync.logout(e.getEntity().getUUID());
+        });
         NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent e) -> Commands.register(e.getDispatcher()));
         ClaimsApi.provide(new ClaimsApiImpl());
         LOG.info("RYSClaims загружен");

@@ -12,6 +12,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import org.jetbrains.annotations.Nullable;
 import works.repka.ryscore.claims.ClaimsApi;
 import works.repka.rysclaims.RYSClaims;
+import works.repka.rysclaims.data.ClaimData;
 import works.repka.rysclaims.data.ClaimSavedData;
 import works.repka.rysclaims.data.TeamLand;
 
@@ -36,6 +37,7 @@ public final class ClaimsServer {
         saved = ClaimSavedData.get(s);
         saved.data().defaults(ServerConfig.snapshot().defaultRights);
         service = new ClaimService(saved.data(), ServerConfig::snapshot, Teams.api(), System::currentTimeMillis, new Hooks());
+        ClaimSync.attach(saved.data());
         logWriter = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "RYSClaims log");
             t.setDaemon(true);
@@ -63,6 +65,9 @@ public final class ClaimsServer {
                 Thread.currentThread().interrupt();
             }
         }
+        ClaimData d = saved == null ? null : saved.data();
+        if (d != null) d.listen(null);
+        ClaimSync.clear();
         server = null;
         saved = null;
         service = null;
@@ -103,6 +108,7 @@ public final class ClaimsServer {
             loaderDirty = false;
             Loader.sync(srv, s);
         }
+        ClaimSync.tick(srv, s);
     }
 
     /** Прогрузка пересчитается на следующем тике (игрок вышел: к тому времени его уже нет в списке). */
@@ -119,6 +125,7 @@ public final class ClaimsServer {
             markDirty();
         }
         loaderDirty = true;
+        ClaimSync.login(player);
     }
 
     /** Пишет файл земли сейчас, а не при очередном сохранении мира: переезд делает необратимое только после записи. */

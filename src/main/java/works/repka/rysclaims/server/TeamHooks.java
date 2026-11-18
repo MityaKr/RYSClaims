@@ -10,6 +10,7 @@ import works.repka.ryscore.team.TeamsApi;
 public final class TeamHooks implements TeamsApi.Listener {
     @Override
     public void onJoined(UUID team, UUID player, boolean carryProgress) {
+        ClaimSync.touch(team);
         if (!ClaimsServer.running()) return;
         ClaimsServer.service().joined(team, player);
         ClaimsServer.loaderDirty();
@@ -17,6 +18,7 @@ public final class TeamHooks implements TeamsApi.Listener {
 
     @Override
     public void onLeft(UUID team, UUID player, boolean keepCopy) {
+        ClaimSync.touch(team);
         ClaimsServer.loaderDirty();
     }
 
@@ -37,6 +39,14 @@ public final class TeamHooks implements TeamsApi.Listener {
 
     @Override
     public void onRoleChanged(UUID team, UUID player) {
+        ClaimSync.touch(team);
         ClaimsServer.loaderDirty();
+    }
+
+    @Override
+    public void onRenamed(UUID team) {
+        // имя команды лежит в палитрах регионов: подписчикам регионы заново
+        ClaimSync.resendAll();
+        ClaimSync.touch(team);
     }
 }

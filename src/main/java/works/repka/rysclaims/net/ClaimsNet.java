@@ -1,6 +1,11 @@
 package works.repka.rysclaims.net;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.DecoderException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -12,20 +17,232 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import works.repka.rysclaims.RYSClaims;
+import works.repka.rysclaims.server.ClaimSync;
 
 /**
- * Сеть RYSClaims (план, раздел 9.2). Пока один пакет: {@link Denied}, причина отказа, если действие дошло до сервера.
- * Остальные пакеты окна земли (подписка на регионы, правки) придут с клиентом З4.
+ * Сеть RYSClaims (план, раздел 9.2), канал необязательный: клиент без мода не отваливается, сервер шлёт ему только строки.
+ *
+ * <p>Клиенту: {@link Hello} (своя команда, лимиты, права, роль; шлётся при входе и при каждой перемене),
+ * {@link Region} (регион 32×32 чанка целиком), {@link Diff} (изменившиеся чанки, только подписчикам региона),
+ * {@link Access} (что можно этому игроку на земле команды, при смене прав), {@link EditResult}, {@link Denied}.
+ * Серверу: {@link Subscribe} (измерение и до 64 регионов), {@link Edit} (до 1024 чанков), {@link Keep},
+ * {@link RightsEdit}. Сервер клиенту не верит: каждая правка проверяется заново.
  */
 public final class ClaimsNet {
+    /** Сколько регионов держит подписка и сколько чанков в одной правке. */
+    public static final int MAX_REGIONS = 64, MAX_EDIT = 1024;
+    /** Бит действий в {@link TeamEntry#access()}: строить, открывать, двери, животные (порядок {@code Rights.Action}). */
+    public static final int BUILD = 1, OPEN = 2, USE = 4, ENTITY = 8;
+
     private ClaimsNet() {}
 
+    private static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(RYSClaims.MODID, path);
+    }
+
+    private static String dim(FriendlyByteBuf buf) {
+        return buf.readUtf(128);
+    }
+
+    private static long[] longs(FriendlyByteBuf buf, int max) {
+        int n = buf.readVarInt();
+        if (n < 0 || n > max) throw new DecoderException("слишком длинный список: " + n);
+        long[] out = new long[n];
+        for (int i = 0; i < n; i++) out[i] = buf.readLong();
+        return out;
+    }
+
+    private static void longs(FriendlyByteBuf buf, long[] v) {
+        buf.writeVarInt(v.length);
+        for (long l : v) buf.writeLong(l);
+    }
+
+    /** Команда в палитре региона: имя, цвет и что можно получателю на её земле. */
+    public record TeamEntry(UUID id, String name, int color, int access) {
+        static TeamEntry read(FriendlyByteBuf buf) {
+            return new TeamEntry(buf.readUUID(), buf.readUtf(64), buf.readInt(), buf.readByte());
+        }
+
+        void write(FriendlyByteBuf buf) {
+            buf.writeUUID(id);
+            buf.writeUtf(name.length() > 64 ? name.substring(0, 64) : name, 64);
+            buf.writeInt(color);
+            buf.writeByte(access);
+        }
+    }
+
+    private static List<TeamEntry> readPalette(FriendlyByteBuf buf) {
+        int n = buf.readVarInt();
+        if (n < 0 || n > 4096) throw new DecoderException("слишком большая палитра: " + n);
+        List<TeamEntry> out = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) out.add(TeamEntry.read(buf));
+        return out;
+    }
+
+    private static void writePalette(FriendlyByteBuf buf, List<TeamEntry> p) {
+        buf.writeVarInt(p.size());
+        for (TeamEntry e : p) e.write(buf);
+    }
+
+    // ---- клиенту ----
+
     /**
-     * Сервер → клиент: отказ. {@code reason} это ключ {@code ClaimService.Reason}, {@code owner} имя хозяина земли (пусто,
-     * если земля скрыта от этого игрока или ничья).
+     * Своя команда: имя, цвет, роль, лимиты, освобождение, права управления и таблица прав доступа ({@code Rights.bits}).
+     * {@code releaseIn} миллисекунды до первого освобождения на момент отправки.
+     */
+    public record Hello(UUID team, String name, int color, boolean solo, String role, int members,
+                        int claimed, int claimLimit, int forced, int forceLimit, int releasing, long releaseIn,
+                        boolean canClaim, boolean canForce, boolean canRights, boolean rightsLocked, int rights, int trusted,
+                        int releaseSeconds, boolean bypass) implements CustomPacketPayload {
+        public static final Type<Hello> TYPE = new Type<>(id("hello"));
+        public static final StreamCodec<FriendlyByteBuf, Hello> CODEC = CustomPacketPayload.codec(Hello::write, Hello::read);
+
+        private static Hello read(FriendlyByteBuf b) {
+            return new Hello(b.readUUID(), b.readUtf(64), b.readInt(), b.readBoolean(), b.readUtf(16), b.readVarInt(),
+                b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarLong(),
+                b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readInt(), b.readVarInt(),
+                b.readVarInt(), b.readBoolean());
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeUUID(team);
+            b.writeUtf(name.length() > 64 ? name.substring(0, 64) : name, 64);
+            b.writeInt(color);
+            b.writeBoolean(solo);
+            b.writeUtf(role, 16);
+            b.writeVarInt(members);
+            b.writeVarInt(claimed);
+            b.writeVarInt(claimLimit);
+            b.writeVarInt(forced);
+            b.writeVarInt(forceLimit);
+            b.writeVarInt(releasing);
+            b.writeVarLong(releaseIn);
+            b.writeBoolean(canClaim);
+            b.writeBoolean(canForce);
+            b.writeBoolean(canRights);
+            b.writeBoolean(rightsLocked);
+            b.writeInt(rights);
+            b.writeVarInt(trusted);
+            b.writeVarInt(releaseSeconds);
+            b.writeBoolean(bypass);
+        }
+
+        public Hello withReleaseIn(long ms) {
+            return new Hello(team, name, color, solo, role, members, claimed, claimLimit, forced, forceLimit, releasing, ms,
+                canClaim, canForce, canRights, rightsLocked, rights, trusted, releaseSeconds, bypass);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Регион целиком: палитра и байты {@link RegionBytes#encode}. */
+    public record Region(String dimension, int rx, int rz, List<TeamEntry> palette, byte[] data) implements CustomPacketPayload {
+        public static final Type<Region> TYPE = new Type<>(id("region"));
+        public static final StreamCodec<FriendlyByteBuf, Region> CODEC = CustomPacketPayload.codec(Region::write, Region::read);
+
+        private static Region read(FriendlyByteBuf b) {
+            return new Region(dim(b), b.readVarInt(), b.readVarInt(), readPalette(b), b.readByteArray(RegionBytes.SIZE + 1));
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeUtf(dimension, 128);
+            b.writeVarInt(rx);
+            b.writeVarInt(rz);
+            writePalette(b, palette);
+            b.writeByteArray(data);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Изменившиеся чанки: байт чанка ссылается на палитру этого пакета. */
+    public record Diff(String dimension, List<TeamEntry> palette, long[] chunks, byte[] codes) implements CustomPacketPayload {
+        public static final Type<Diff> TYPE = new Type<>(id("diff"));
+        public static final StreamCodec<FriendlyByteBuf, Diff> CODEC = CustomPacketPayload.codec(Diff::write, Diff::read);
+
+        private static Diff read(FriendlyByteBuf b) {
+            String d = dim(b);
+            List<TeamEntry> p = readPalette(b);
+            long[] c = longs(b, RegionBytes.SIZE * MAX_REGIONS);
+            byte[] codes = b.readByteArray(c.length);
+            if (codes.length != c.length) throw new DecoderException("байтов не столько, сколько чанков");
+            return new Diff(d, p, c, codes);
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeUtf(dimension, 128);
+            writePalette(b, palette);
+            longs(b, chunks);
+            b.writeByteArray(codes);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Что можно получателю на земле этих команд: биты {@link #BUILD} и дальше. */
+    public record Access(List<UUID> teams, byte[] bits) implements CustomPacketPayload {
+        public static final Type<Access> TYPE = new Type<>(id("access"));
+        public static final StreamCodec<FriendlyByteBuf, Access> CODEC = CustomPacketPayload.codec(Access::write, Access::read);
+
+        private static Access read(FriendlyByteBuf b) {
+            int n = b.readVarInt();
+            if (n < 0 || n > 4096) throw new DecoderException("слишком много команд: " + n);
+            List<UUID> t = new ArrayList<>(n);
+            for (int i = 0; i < n; i++) t.add(b.readUUID());
+            byte[] bits = b.readByteArray(n);
+            return new Access(t, bits);
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeVarInt(teams.size());
+            for (UUID u : teams) b.writeUUID(u);
+            b.writeByteArray(bits);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Итог правки: сколько сделано и сколько пропущено по причинам ({@code ClaimService.Skip} по порядку). */
+    public record EditResult(int op, int done, int[] skipped) implements CustomPacketPayload {
+        public static final Type<EditResult> TYPE = new Type<>(id("edit_result"));
+        public static final StreamCodec<FriendlyByteBuf, EditResult> CODEC = CustomPacketPayload.codec(EditResult::write, EditResult::read);
+
+        private static EditResult read(FriendlyByteBuf b) {
+            int op = b.readVarInt(), done = b.readVarInt();
+            int[] s = b.readVarIntArray(32);
+            return new EditResult(op, done, s);
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeVarInt(op);
+            b.writeVarInt(done);
+            b.writeVarIntArray(skipped);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Отказ. {@code reason} это ключ {@code ClaimService.Reason}, {@code owner} имя хозяина земли (пусто, если земля скрыта
+     * от этого игрока или ничья).
      */
     public record Denied(String reason, String owner) implements CustomPacketPayload {
-        public static final Type<Denied> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(RYSClaims.MODID, "denied"));
+        public static final Type<Denied> TYPE = new Type<>(id("denied"));
         public static final StreamCodec<ByteBuf, Denied> CODEC = StreamCodec.composite(
             ByteBufCodecs.stringUtf8(32), Denied::reason, ByteBufCodecs.stringUtf8(128), Denied::owner, Denied::new);
 
@@ -35,14 +252,114 @@ public final class ClaimsNet {
         }
     }
 
-    public static void register(RegisterPayloadHandlersEvent event) {
-        // optional: клиент без мода (или старый) не отваливается, сервер тогда шлёт строку над хотбаром
-        PayloadRegistrar registrar = event.registrar("1").optional();
-        registrar.playToClient(Denied.TYPE, Denied.CODEC, ClaimsNet::onDenied);
+    // ---- серверу ----
+
+    /** Подписка: измерение и регионы (упакованы как чанк). Больше {@link #MAX_REGIONS} сервер не держит. */
+    public record Subscribe(String dimension, long[] regions) implements CustomPacketPayload {
+        public static final Type<Subscribe> TYPE = new Type<>(id("subscribe"));
+        public static final StreamCodec<FriendlyByteBuf, Subscribe> CODEC = CustomPacketPayload.codec(Subscribe::write, Subscribe::read);
+
+        private static Subscribe read(FriendlyByteBuf b) {
+            return new Subscribe(dim(b), longs(b, 256));
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeUtf(dimension, 128);
+            longs(b, regions);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
     }
 
-    private static void onDenied(Denied payload, IPayloadContext context) {
-        if (FMLEnvironment.dist.isClient()) Client.denied(payload);
+    public static final int OP_CLAIM = 0, OP_RELEASE = 1, OP_LOAD = 2, OP_UNLOAD = 3, OP_KEEP = 4, OP_RIGHTS = 5;
+
+    /** Правка земли своей команды: действие {@code OP_*} и до {@link #MAX_EDIT} чанков. */
+    public record Edit(String dimension, int op, long[] chunks) implements CustomPacketPayload {
+        public static final Type<Edit> TYPE = new Type<>(id("edit"));
+        public static final StreamCodec<FriendlyByteBuf, Edit> CODEC = CustomPacketPayload.codec(Edit::write, Edit::read);
+
+        private static Edit read(FriendlyByteBuf b) {
+            return new Edit(dim(b), b.readVarInt(), longs(b, MAX_EDIT));
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeUtf(dimension, 128);
+            b.writeVarInt(op);
+            longs(b, chunks);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Оставить: отменить все идущие освобождения своей команды. */
+    public record Keep() implements CustomPacketPayload {
+        public static final Keep INSTANCE = new Keep();
+        public static final Type<Keep> TYPE = new Type<>(id("keep"));
+        public static final StreamCodec<FriendlyByteBuf, Keep> CODEC = StreamCodec.unit(INSTANCE);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public static final int RIGHTS_CELL = 0, RIGHTS_PRESET = 1, RIGHTS_TABLE = 2;
+
+    /**
+     * Правка прав доступа своей команды: клетка окна ({@code action}, {@code column} по {@code Rights.Column}, {@code on}),
+     * готовый набор ({@code value} номер {@code Rights.Preset}) или вся таблица ({@code value} это {@code Rights.bits}).
+     */
+    public record RightsEdit(int kind, int action, int column, boolean on, int value) implements CustomPacketPayload {
+        public static final Type<RightsEdit> TYPE = new Type<>(id("rights_edit"));
+        public static final StreamCodec<FriendlyByteBuf, RightsEdit> CODEC = CustomPacketPayload.codec(RightsEdit::write, RightsEdit::read);
+
+        private static RightsEdit read(FriendlyByteBuf b) {
+            return new RightsEdit(b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readBoolean(), b.readInt());
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeVarInt(kind);
+            b.writeVarInt(action);
+            b.writeVarInt(column);
+            b.writeBoolean(on);
+            b.writeInt(value);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    // ---- регистрация ----
+
+    public static void register(RegisterPayloadHandlersEvent event) {
+        // optional: клиент без мода (или старый) не отваливается, сервер тогда шлёт строку над хотбаром
+        PayloadRegistrar r = event.registrar("1").optional();
+        r.playToClient(Denied.TYPE, Denied.CODEC, (p, c) -> client(() -> Client.denied(p)));
+        r.playToClient(Hello.TYPE, Hello.CODEC, (p, c) -> client(() -> Client.hello(p)));
+        r.playToClient(Region.TYPE, Region.CODEC, (p, c) -> client(() -> Client.region(p)));
+        r.playToClient(Diff.TYPE, Diff.CODEC, (p, c) -> client(() -> Client.diff(p)));
+        r.playToClient(Access.TYPE, Access.CODEC, (p, c) -> client(() -> Client.access(p)));
+        r.playToClient(EditResult.TYPE, EditResult.CODEC, (p, c) -> client(() -> Client.result(p)));
+        r.playToServer(Subscribe.TYPE, Subscribe.CODEC, (p, c) -> server(c, pl -> ClaimSync.subscribe(pl, p)));
+        r.playToServer(Edit.TYPE, Edit.CODEC, (p, c) -> server(c, pl -> ClaimSync.edit(pl, p)));
+        r.playToServer(Keep.TYPE, Keep.CODEC, (p, c) -> server(c, ClaimSync::keep));
+        r.playToServer(RightsEdit.TYPE, RightsEdit.CODEC, (p, c) -> server(c, pl -> ClaimSync.rights(pl, p)));
+    }
+
+    private static void client(Runnable r) {
+        if (FMLEnvironment.dist.isClient()) r.run();
+    }
+
+    private static void server(IPayloadContext c, java.util.function.Consumer<ServerPlayer> body) {
+        if (c.player() instanceof ServerPlayer p) body.accept(p);
     }
 
     /** Отдельный класс: на выделенном сервере клиентские классы не загружаются. */
@@ -50,14 +367,39 @@ public final class ClaimsNet {
         static void denied(Denied d) {
             works.repka.rysclaims.client.DenyFeedback.show(d.reason(), d.owner());
         }
+
+        static void hello(Hello h) {
+            works.repka.rysclaims.client.LandCache.hello(h);
+        }
+
+        static void region(Region r) {
+            works.repka.rysclaims.client.LandCache.region(r);
+        }
+
+        static void diff(Diff d) {
+            works.repka.rysclaims.client.LandCache.diff(d);
+        }
+
+        static void access(Access a) {
+            works.repka.rysclaims.client.LandCache.access(a);
+        }
+
+        static void result(EditResult r) {
+            works.repka.rysclaims.client.LandCache.result(r);
+        }
     }
 
-    /** Может ли клиент принять пакет отказа. */
+    /** Может ли клиент принять пакеты земли. */
     public static boolean accepts(ServerPlayer player) {
         return player.connection != null && player.connection.hasChannel(Denied.TYPE);
     }
 
     public static void denied(ServerPlayer player, String reason, String owner) {
         PacketDistributor.sendToPlayer(player, new Denied(reason, owner));
+    }
+
+    /** Шлёт игроку, если его клиент знает этот пакет. */
+    public static void send(ServerPlayer player, CustomPacketPayload payload) {
+        if (player.connection != null && player.connection.hasChannel(payload.type())) PacketDistributor.sendToPlayer(player, payload);
     }
 }

@@ -45,6 +45,28 @@ public final class ClaimData {
     private Rights defaults;
     /** Сколько правок земли было: откат переезда сверяет это число. */
     private long edits;
+    private Changes changes = Changes.NONE;
+
+    /** Кто слушает правки чанков: рассылка клиентам ({@code server.ClaimSync}). Зовётся сразу после правки. */
+    public interface Changes {
+        Changes NONE = new Changes() {
+            @Override
+            public void chunk(String dimension, long chunk) {}
+
+            @Override
+            public void all() {}
+        };
+
+        /** Чанк занят, освобождён, передан, у него сменилась прогрузка или отсчёт. */
+        void chunk(String dimension, long chunk);
+
+        /** Поменялось всё сразу (переезд, откат). */
+        void all();
+    }
+
+    public void listen(@Nullable Changes listener) {
+        this.changes = listener == null ? Changes.NONE : listener;
+    }
 
     public ClaimData(Rights defaults) {
         this.defaults = defaults.copy();
@@ -153,9 +175,10 @@ public final class ClaimData {
     public @Nullable Claim put(String dimension, long chunk, UUID team, @Nullable UUID by, long at) {
         Long2ObjectOpenHashMap<Claim> map = dims.computeIfAbsent(dimension, d -> new Long2ObjectOpenHashMap<>());
         if (map.containsKey(chunk)) return null;
-        Claim c = new Claim(team, by, at);
+        Claim c = new Claim(dimension, chunk, team, by, at);
         map.put(chunk, c);
         landOrCreate(team).claimed++;
+        changes.chunk(dimension, chunk);
         return c;
     }
 
@@ -168,6 +191,7 @@ public final class ClaimData {
         l.claimed--;
         if (c.force) l.forced--;
         if (map.isEmpty()) dims.remove(dimension);
+        changes.chunk(dimension, chunk);
         return c;
     }
 
@@ -175,10 +199,17 @@ public final class ClaimData {
         if (c.force == on) return;
         c.force = on;
         landOrCreate(c.team).forced += on ? 1 : -1;
+        changed(c);
     }
 
     public void setRelease(Claim c, long releaseAt) {
+        boolean was = c.releasing();
         c.releaseAt = releaseAt;
+        if (was != c.releasing()) changed(c);
+    }
+
+    private void changed(Claim c) {
+        changes.chunk(c.dimension, c.pos);
     }
 
     /** Отдаёт всю землю команды {@code from} команде {@code to} вместе с добавкой команды. Возвращает чанки по измерениям. */
@@ -209,7 +240,7 @@ public final class ClaimData {
         Long2ObjectOpenHashMap<Claim> map = dims.get(dimension);
         Claim old = map == null ? null : map.get(chunk);
         if (old == null || old.team.equals(team)) return;
-        Claim c = new Claim(team, old.by, old.at);
+        Claim c = new Claim(dimension, chunk, team, old.by, old.at);
         c.plot = old.plot;
         c.force = old.force;
         c.releaseAt = old.releaseAt;
@@ -221,6 +252,7 @@ public final class ClaimData {
             src.forced--;
             dst.forced++;
         }
+        changes.chunk(dimension, chunk);
     }
 
     /** Заменяет всё содержимое посчитанной базой: переезд кладёт её одним шагом. Счётчик правок не меняется. */
@@ -233,6 +265,7 @@ public final class ClaimData {
         players.putAll(other.players);
         archive = other.archive.copy();
         homes.putAll(other.homes);
+        changes.all();
     }
 
     /** Пустая база: откат переезда. Счётчик правок не меняется. */
@@ -241,6 +274,7 @@ public final class ClaimData {
         teams.clear();
         players.clear();
         archive = new ListTag();
+        changes.all();
     }
 
     /** Отмечает правку земли игроком или оператором (не переездом). */
