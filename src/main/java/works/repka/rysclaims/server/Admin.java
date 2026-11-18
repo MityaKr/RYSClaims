@@ -136,10 +136,12 @@ public final class Admin {
         String name = player.getGameProfile().getName();
         byOwner.forEach((owner, list) -> {
             boolean admin = !owner.equals(own);
+            // на чужой земле строку в ленту пишет только «Оператор …» ниже, без обычной «… освобождает» (перепроверка 18.11, пункт 14)
+            UUID actor = admin ? null : player.getUUID();
             ClaimService.Result r = switch (op) {
-                case ClaimsNet.OP_RELEASE -> s.release(player.getUUID(), owner, dim, list, admin);
-                case ClaimsNet.OP_LOAD -> s.load(player.getUUID(), owner, dim, list, true, admin);
-                case ClaimsNet.OP_UNLOAD -> s.load(player.getUUID(), owner, dim, list, false, admin);
+                case ClaimsNet.OP_RELEASE -> s.release(actor, owner, dim, list, admin);
+                case ClaimsNet.OP_LOAD -> s.load(actor, owner, dim, list, true, admin);
+                case ClaimsNet.OP_UNLOAD -> s.load(actor, owner, dim, list, false, admin);
                 default -> new ClaimService.Result();
             };
             total.done += r.done;
