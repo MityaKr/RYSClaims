@@ -323,6 +323,12 @@ public final class ClaimSync {
         UUID id = player.getUUID();
         UUID team = s.teams().teamOf(id);
         LongArrayList chunks = new LongArrayList(edit.chunks());
+        if (s.bypass(id) && player.hasPermissions(2) && edit.op() != ClaimsNet.OP_CLAIM) {
+            ClaimService.Result r = Admin.foreignEdit(s, player, team, edit.dimension(), edit.op(), chunks);
+            touch(team);
+            ClaimsNet.send(player, new ClaimsNet.EditResult(edit.op(), r.done, skipped(r)));
+            return;
+        }
         ClaimService.Result r = switch (edit.op()) {
             case ClaimsNet.OP_CLAIM -> s.claim(id, team, edit.dimension(), chunks, false);
             case ClaimsNet.OP_RELEASE -> s.release(id, team, edit.dimension(), chunks, false);
@@ -335,7 +341,7 @@ public final class ClaimSync {
         ClaimsNet.send(player, new ClaimsNet.EditResult(edit.op(), r.done, skipped(r)));
     }
 
-    private static int[] skipped(ClaimService.Result r) {
+    static int[] skipped(ClaimService.Result r) {
         int[] out = new int[ClaimService.Skip.values().length];
         r.skipped.forEach((k, n) -> out[k.ordinal()] = n);
         return out;
@@ -619,6 +625,10 @@ public final class ClaimSync {
     }
 
     static ClaimsNet.Hello hello(ClaimService s, UUID id) {
+        return hello(s, id, false);
+    }
+
+    static ClaimsNet.Hello hello(ClaimService s, UUID id, boolean op) {
         TeamsApi api = TeamsApi.get();
         UUID team = s.teams().teamOf(id);
         Limits lim = s.limits(team);
@@ -631,11 +641,11 @@ public final class ClaimSync {
             s.data().claimed(team), lim.claims, s.data().forced(team), lim.force, (int) rel[0], rel[1],
             s.manages(id, team, ClaimService.PERM_CLAIM), s.manages(id, team, ClaimService.PERM_FORCE),
             s.editsRights(id, team, admin), !s.settings().teamsEditRights, rights.bits(), land == null ? 0 : land.trusted.size(),
-            s.settings().releaseSeconds, admin, epoch);
+            s.settings().releaseSeconds, admin, epoch, op);
     }
 
     private static void sendHello(ClaimService s, ServerPlayer p, Viewer v, boolean force) {
-        ClaimsNet.Hello h = hello(s, p.getUUID());
+        ClaimsNet.Hello h = hello(s, p.getUUID(), p.hasPermissions(2));
         // в сравнении момент освобождения на часах сервера, в пакете сколько до него осталось
         if (!force && h.equals(v.hello)) return;
         v.hello = h;

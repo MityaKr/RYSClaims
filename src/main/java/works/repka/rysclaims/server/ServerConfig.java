@@ -1,7 +1,9 @@
 package works.repka.rysclaims.server;
 
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import works.repka.rysclaims.data.Rights;
 import works.repka.rysclaims.data.Settings;
@@ -186,6 +188,69 @@ public final class ServerConfig {
         DEF_ENTITY.set(s.defaultRights.presetOf(Rights.Action.ENTITY).key());
         SPEC.save();
         invalidate();
+    }
+
+    /**
+     * Настройки, которые оператор правит в окне (макет 51): ключ окна → значение файла. Сохраняется сразу, снимок
+     * сбрасывается. Списки (измерения, профили) правятся в файле.
+     */
+    private static Map<String, ModConfigSpec.ConfigValue<?>> editable() {
+        Map<String, ModConfigSpec.ConfigValue<?>> m = new LinkedHashMap<>();
+        m.put("claimsPerTeam", CLAIMS);
+        m.put("forcePerTeam", FORCE);
+        m.put("claimsPerMember", CLAIMS_MEMBER);
+        m.put("forcePerMember", FORCE_MEMBER);
+        m.put("adjacentOnly", ADJACENT);
+        m.put("ownerlessExplosions", OWNERLESS);
+        m.put("pistonsAcrossBorders", PISTONS);
+        m.put("fluidsAcrossBorders", FLUIDS);
+        m.put("fireAcrossBorders", FIRE);
+        m.put("hoppersAcrossBorders", HOPPERS);
+        m.put("pvpMode", PVP_MODE);
+        m.put("noWilderness", NO_WILD);
+        m.put("allyMode", ALLY_MODE);
+        m.put("maxForceLoadMode", MAX_LOAD);
+        m.put("build", DEF_BUILD);
+        m.put("open", DEF_OPEN);
+        m.put("use", DEF_USE);
+        m.put("entity", DEF_ENTITY);
+        m.put("teamsEditRights", EDIT_RIGHTS);
+        m.put("logDays", LOG_DAYS);
+        return m;
+    }
+
+    /** Значения правимых настроек строками (для окна). */
+    public static Map<String, String> values() {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (!SPEC.isLoaded()) return out;
+        editable().forEach((k, v) -> out.put(k, String.valueOf(v.get())));
+        return out;
+    }
+
+    /** Правка из окна: проверка значения, запись в файл, сброс снимка. Возвращает, принято ли. */
+    @SuppressWarnings("unchecked")
+    public static boolean set(String key, String value) {
+        if (!SPEC.isLoaded()) return false;
+        ModConfigSpec.ConfigValue<?> v = editable().get(key);
+        if (v == null) return false;
+        try {
+            if (v instanceof ModConfigSpec.IntValue iv) {
+                int n = Integer.parseInt(value.trim());
+                if (!iv.getSpec().test(n)) return false;
+                iv.set(n);
+            } else if (v instanceof ModConfigSpec.BooleanValue bv) {
+                bv.set(Boolean.parseBoolean(value.trim()));
+            } else {
+                ModConfigSpec.ConfigValue<String> sv = (ModConfigSpec.ConfigValue<String>) v;
+                if (!sv.getSpec().test(value)) return false;
+                sv.set(value);
+            }
+        } catch (RuntimeException e) {
+            return false;
+        }
+        SPEC.save();
+        invalidate();
+        return true;
     }
 
     private static Rights.Preset preset(ModConfigSpec.ConfigValue<String> v) {

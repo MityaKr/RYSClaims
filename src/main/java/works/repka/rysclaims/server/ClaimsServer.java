@@ -146,6 +146,14 @@ public final class ClaimsServer {
         srv.overworld().getDataStorage().save();
     }
 
+    /** Оператор поменял настройку в окне: права новых команд, версия прав, регионы заново (видимость земли). */
+    public static void settingsChanged() {
+        ClaimSavedData d = saved;
+        if (d != null) d.data().defaults(ServerConfig.snapshot().defaultRights);
+        ClaimSync.accessChanged();
+        loaderDirty = true;
+    }
+
     public static void markDirty() {
         ClaimSavedData d = saved;
         if (d != null) d.setDirty();

@@ -60,7 +60,7 @@ public final class LandScreen extends ScaledScreen {
     private static final long RESULT_MS = 6000, UNDO_MS = 30_000;
     private static final int SHIELD_TILE = 0xFFD9714F;
 
-    enum Page { GRID, PLOTS, RIGHTS, LOG }
+    enum Page { GRID, PLOTS, RIGHTS, LOG, SERVER, TEAMS }
 
     enum Tool { CLAIM, FORCE, RELEASE }
 
@@ -200,8 +200,10 @@ public final class LandScreen extends ScaledScreen {
             case PLOTS -> plots(g, t, h, mx, my);
             case RIGHTS -> rights(g, t, h, mx, my);
             case LOG -> journal(g, t, h, mx, my);
+            case SERVER -> server(g, t, h, mx, my);
+            case TEAMS -> teams(g, t, h, mx, my);
         }
-        boolean lists = presetDrop.open || dimDrop.open || visDrop.open || menuOpen();
+        boolean lists = presetDrop.open || dimDrop.open || visDrop.open || menuOpen() || adminOpen != null;
         if (tip != null && !lists && dialog == null) Kit.tooltip(g, t, tip, mx, my);
         if (dialog != null) Kit.dialog(g, t, hits, dialog, mx, my);
     }
@@ -234,8 +236,15 @@ public final class LandScreen extends ScaledScreen {
         int plotsN = st == null ? 0 : st.plots().size();
         Page[] pages = Page.values();
         int day = lastDay(LandCache.log());
+        ClaimsNet.Hello hh = LandCache.hello();
+        boolean op = hh != null && hh.op();
+        if (!op && (page == Page.SERVER || page == Page.TEAMS)) setPage(Page.GRID);
+        if (!op) pages = java.util.Arrays.copyOf(pages, 4);
+        ClaimsNet.AdminState adm = LandCache.admin();
         String[] labels = {Words.t("screen.page.grid"), plotsN > 0 ? Words.t("screen.page.plots.n", plotsN) : Words.t("screen.page.plots"),
-            Words.t("screen.page.rights"), day > 0 ? Words.t("screen.page.log.n", day) : Words.t("screen.page.log")};
+            Words.t("screen.page.rights"), day > 0 ? Words.t("screen.page.log.n", day) : Words.t("screen.page.log"),
+            Words.t("screen.page.server"), adm != null ? Words.t("screen.page.teams.n", adm.teams().size()) : Words.t("screen.page.teams")};
+        if (!op) labels = java.util.Arrays.copyOf(labels, 4);
         float sum = 0;
         for (String l : labels) sum += Draw.labelWidth(l, 12.5f, Weight.MEDIUM);
         int w = (int) Math.ceil(sum) + 12 * labels.length + 2 * (labels.length - 1) + 4;
@@ -254,6 +263,7 @@ public final class LandScreen extends ScaledScreen {
         dimDrop.close();
         visDrop.close();
         for (Kit.Dropdown d : menus.values()) d.close();
+        for (Kit.Dropdown d : adminDrops.values()) d.close();
     }
 
     // ---- полотно ----
@@ -571,7 +581,7 @@ public final class LandScreen extends ScaledScreen {
             if (st == null) {
                 s.free++;
                 s.freeList.add(c);
-            } else if (!st.team().id().equals(h.team())) {
+            } else if (!st.team().id().equals(h.team()) && !(h.bypass() && h.op() && tool != Tool.CLAIM)) {
                 s.foreign++;
             } else {
                 s.own++;
@@ -604,8 +614,9 @@ public final class LandScreen extends ScaledScreen {
         Draw.rect(g, px0, top, 1, bottom - top - 1, t.c("panel.border"));
         Sel s = analyse(h);
         boolean right = switch (tool) {
-            case CLAIM, RELEASE -> h.canClaim();
-            case FORCE -> h.canForce();
+            case CLAIM -> h.canClaim();
+            case RELEASE -> h.canClaim() || (h.bypass() && h.op());
+            case FORCE -> h.canForce() || (h.bypass() && h.op());
         };
 
         // команда и роль
@@ -654,6 +665,7 @@ public final class LandScreen extends ScaledScreen {
         y += 10;
         List<String[]> rows = new ArrayList<>();
         int warnRow = -1;
+        if (h.bypass() && h.op() && tool != Tool.CLAIM) y = callout(g, t, x, y, w, Words.t("panel.operator"));
         if (!right) {
             y = callout(g, t, x, y, w, Words.t(h.solo() ? "panel.no_right.solo" : "panel.no_right"));
         } else if (s.total == 0) {
@@ -1684,6 +1696,238 @@ public final class LandScreen extends ScaledScreen {
         return (int) ly + 6;
     }
 
+    // ---- оператор: сервер и команды (макеты 51, 52, 52b, 53) ----
+
+    private final Map<String, Kit.Dropdown> adminDrops = new HashMap<>();
+    private @Nullable String adminOpen;
+    private int teamScroll;
+
+    private void adminEdit(String kind, String key, String value) {
+        LandCache.send(new ClaimsNet.AdminEdit(kind, key, value));
+    }
+
+    /** Карточка настроек: рамка, заголовок капсом. Возвращает y первой строки. */
+    private int adminCard(GuiGraphics g, Theme t, int x, int y, int w, int h, String title) {
+        Draw.roundBox(g, x, y, w, h, 6, t.c("card.bg"), t.c("card.border"));
+        Kit.caps(g, t, title, x + 8, y + 8, 10.5f, 0.44f);
+        return y + 16;
+    }
+
+    private void numberRow(GuiGraphics g, Theme t, ClaimsNet.AdminState a, int x, int y, int w, String key, int step, int mx, int my) {
+        Draw.label(g, Words.t("admin.s." + key), x, y + 6, 12, Weight.REGULAR, t.c("text.primary"));
+        int v;
+        try {
+            v = Integer.parseInt(a.get(key));
+        } catch (NumberFormatException e) {
+            v = 0;
+        }
+        int value = v;
+        Kit.stepper(g, t, hits, x + w - 62, y, 62, Integer.toString(v), mx, my,
+            () -> adminEdit("setting", key, Integer.toString(Math.max(0, value - step))), () -> adminEdit("setting", key, Integer.toString(value + step)));
+    }
+
+    private void toggleRow(GuiGraphics g, Theme t, ClaimsNet.AdminState a, int x, int y, int w, String key, int mx, int my) {
+        Draw.label(g, Words.t("admin.s." + key), x, y + 6, 12, Weight.REGULAR, t.c("text.primary"));
+        boolean on = Boolean.parseBoolean(a.get(key));
+        int tx = x + w - 18;
+        Kit.toggle(g, t, tx, y + 2, on, Kit.over(mx, my, tx, y + 2, 18, 10));
+        hits.add(tx, y + 2, 18, 10, b -> adminEdit("setting", key, Boolean.toString(!on)));
+    }
+
+    /** Строка с выбором одного из значений; подписи значений по ключам {@code admin.v.<ключ>.<значение>}. */
+    private void choiceRow(GuiGraphics g, Theme t, ClaimsNet.AdminState a, int x, int y, int w, String key, String[] options, int mx, int my) {
+        Draw.label(g, Words.t("admin.s." + key), x, y + 6, 12, Weight.REGULAR, t.c("text.primary"));
+        String cur = a.get(key).toLowerCase(java.util.Locale.ROOT);
+        String label = Words.t("admin.v." + key + "." + cur);
+        Kit.Dropdown d = adminDrops.computeIfAbsent(key, k -> new Kit.Dropdown());
+        int dw = Kit.dropdownWidth(label, 96);
+        Kit.dropdown(g, t, hits, d, x + w - dw, y, 96, label, false, mx, my);
+        if (d.open) adminOpen = key;
+    }
+
+    private static final String[] OWNERLESS = {"own", "never", "always"}, CROSS = {"false", "true"}, PVP = {"always", "team", "never"},
+        ALLY = {"team", "all", "none"}, LOAD = {"online", "always"}, PRESET = {"team", "team_and_allies", "open"};
+
+    private void server(GuiGraphics g, Theme t, ClaimsNet.Hello h, int mx, int my) {
+        LandCache.wantAdmin(4000);
+        ClaimsNet.AdminState a = LandCache.admin();
+        int x = wx + 12, top = wy + HEADER + BAR + 4, w = ww - 24;
+        if (a == null) {
+            String text = Words.t("screen.waiting");
+            Draw.label(g, text, x + (w - Draw.labelWidth(text, 12.5f, Weight.REGULAR)) / 2f, top + 60, 12.5f, Weight.REGULAR, t.c("text.muted"));
+            return;
+        }
+        adminOpen = null;
+        int cw = (w - 12) / 3, ch1 = 112, rh = 18;
+        // ряд 1: лимиты, защита мира, игроки
+        int y = adminCard(g, t, x, top, cw, ch1, Words.t("admin.card.limits"));
+        int ix = x + 8, iw = cw - 16;
+        numberRow(g, t, a, ix, y, iw, "claimsPerTeam", 50, mx, my);
+        numberRow(g, t, a, ix, y + rh, iw, "forcePerTeam", 5, mx, my);
+        numberRow(g, t, a, ix, y + rh * 2, iw, "claimsPerMember", 10, mx, my);
+        numberRow(g, t, a, ix, y + rh * 3, iw, "forcePerMember", 1, mx, my);
+        toggleRow(g, t, a, ix, y + rh * 4, iw, "adjacentOnly", mx, my);
+        int x2 = x + cw + 6;
+        y = adminCard(g, t, x2, top, cw, ch1, Words.t("admin.card.world"));
+        ix = x2 + 8;
+        choiceRow(g, t, a, ix, y, iw, "ownerlessExplosions", OWNERLESS, mx, my);
+        choiceRow(g, t, a, ix, y + rh, iw, "pistonsAcrossBorders", CROSS, mx, my);
+        choiceRow(g, t, a, ix, y + rh * 2, iw, "fluidsAcrossBorders", CROSS, mx, my);
+        choiceRow(g, t, a, ix, y + rh * 3, iw, "fireAcrossBorders", CROSS, mx, my);
+        choiceRow(g, t, a, ix, y + rh * 4, iw, "hoppersAcrossBorders", CROSS, mx, my);
+        int x3 = x + 2 * (cw + 6), cw3 = w - 2 * (cw + 6);
+        y = adminCard(g, t, x3, top, cw3, ch1, Words.t("admin.card.players"));
+        ix = x3 + 8;
+        int iw3 = cw3 - 16;
+        choiceRow(g, t, a, ix, y, iw3, "pvpMode", PVP, mx, my);
+        toggleRow(g, t, a, ix, y + rh, iw3, "noWilderness", mx, my);
+        choiceRow(g, t, a, ix, y + rh * 2, iw3, "allyMode", ALLY, mx, my);
+        choiceRow(g, t, a, ix, y + rh * 3, iw3, "maxForceLoadMode", LOAD, mx, my);
+        numberRow(g, t, a, ix, y + rh * 4, iw3, "logDays", 1, mx, my);
+        // ряд 2: права новых команд и перенос
+        int top2 = top + ch1 + 6, ch2 = 112;
+        y = adminCard(g, t, x, top2, cw * 2 + 6, ch2, Words.t("admin.card.new_teams"));
+        ix = x + 8;
+        int iw2 = cw * 2 + 6 - 16;
+        choiceRow(g, t, a, ix, y, iw2, "build", PRESET, mx, my);
+        choiceRow(g, t, a, ix, y + rh, iw2, "open", PRESET, mx, my);
+        choiceRow(g, t, a, ix, y + rh * 2, iw2, "use", PRESET, mx, my);
+        choiceRow(g, t, a, ix, y + rh * 3, iw2, "entity", PRESET, mx, my);
+        toggleRow(g, t, a, ix, y + rh * 4, iw2, "teamsEditRights", mx, my);
+        y = adminCard(g, t, x3, top2, cw3, ch2, Words.t("admin.card.import"));
+        ix = x3 + 8;
+        List<String> lines = Draw.wrapLabel(Words.t(a.total() == 0 ? "admin.import.empty" : "admin.import.has", a.total()), iw3, 11.5f, Weight.REGULAR, 4);
+        float ly = y + 4;
+        for (String line : lines) {
+            Draw.label(g, line, ix, ly, 11.5f, Weight.REGULAR, t.c("text.secondary"));
+            ly += 8;
+        }
+        if (a.canImport()) {
+            String run = Words.t("admin.import.run"), undo = Words.t("admin.import.undo");
+            int rw = (int) Kit.buttonWidth(run, 12), uw = (int) Kit.buttonWidth(undo, 12);
+            int by = top2 + ch2 - 22;
+            if (a.total() == 0) Kit.button(g, t, hits, ix, by, rw, 14, run, true, mx, my, () -> adminEdit("import", "", ""));
+            else Kit.button(g, t, hits, ix, by, uw, 14, undo, false, mx, my, () -> adminEdit("undo", "", ""));
+        } else {
+            Draw.label(g, Words.t("admin.import.level"), ix, top2 + ch2 - 14, 11, Weight.REGULAR, t.c("text.muted"));
+        }
+        Draw.label(g, Words.t("admin.note"), x, wy + wh - 12, 11, Weight.REGULAR, t.c("text.muted"));
+        // раскрытый список последним
+        if (adminOpen != null) {
+            String key = adminOpen;
+            String[] options = switch (key) {
+                case "ownerlessExplosions" -> OWNERLESS;
+                case "pvpMode" -> PVP;
+                case "allyMode" -> ALLY;
+                case "maxForceLoadMode" -> LOAD;
+                case "build", "open", "use", "entity" -> PRESET;
+                default -> CROSS;
+            };
+            List<Kit.Option> opts = new ArrayList<>();
+            int sel = -1;
+            String cur = a.get(key).toLowerCase(java.util.Locale.ROOT);
+            for (int i = 0; i < options.length; i++) {
+                opts.add(new Kit.Option(Words.t("admin.v." + key + "." + options[i])));
+                if (options[i].equals(cur)) sel = i;
+            }
+            Kit.dropdownList(g, t, hits, adminDrops.get(key), opts, sel, 120, mx, my, i -> adminEdit("setting", key, options[i]));
+        }
+    }
+
+    private @Nullable UUID limitsFor;
+    private int limitClaims, limitForce;
+
+    private void teams(GuiGraphics g, Theme t, ClaimsNet.Hello h, int mx, int my) {
+        LandCache.wantAdmin(4000);
+        ClaimsNet.AdminState a = LandCache.admin();
+        int x = wx + 12, top = wy + HEADER + BAR + 4, w = ww - 24;
+        if (a == null) {
+            String text = Words.t("screen.waiting");
+            Draw.label(g, text, x + (w - Draw.labelWidth(text, 12.5f, Weight.REGULAR)) / 2f, top + 60, 12.5f, Weight.REGULAR, t.c("text.muted"));
+            return;
+        }
+        // режим оператора (макет 53)
+        int bh = 24;
+        int warn = t.c("state.warn");
+        Draw.roundBox(g, x, top, w, bh, 6, Draw.alpha(warn, 0.12f), Draw.alpha(warn, 0.5f));
+        Icons.draw(g, Icons.Shape.KEY, x + 8, top + 8, 8, warn);
+        String head = Words.t(a.bypass() ? "admin.bypass.on" : "admin.bypass.off");
+        Draw.label(g, head, x + 22, top + 8, 12, Weight.SEMIBOLD, t.c("text.primary"));
+        Draw.label(g, Draw.ellipsize(Words.t("admin.bypass.note"), w - 60, 11, Weight.REGULAR), x + 22, top + 16.5f, 11, Weight.REGULAR, t.c("text.secondary"));
+        int tx = x + w - 26;
+        Kit.toggle(g, t, tx, top + 7, a.bypass(), Kit.over(mx, my, tx, top + 7, 18, 10));
+        hits.add(tx, top + 7, 18, 10, b -> adminEdit("bypass", "", ""));
+        int y = top + bh + 6;
+        int chunks = 0, forced = 0;
+        for (ClaimsNet.TeamRow r : a.teams()) {
+            chunks += r.claimed();
+            forced += r.forced();
+        }
+        String sum = Words.t("admin.teams.sum", a.teams().size(), chunks, forced);
+        Draw.label(g, sum, x + w - Draw.labelWidth(sum, 11, Weight.REGULAR), y + 4, 11, Weight.REGULAR, t.c("text.muted"));
+        y += 10;
+        int cName = x + 18, cPl = x + 190, cCh = x + 240, cFo = x + 310, cSeen = x + 370;
+        Kit.caps(g, t, Words.t("admin.teams.col.name"), cName, y + 4, 10.5f, 0.44f);
+        Kit.caps(g, t, Words.t("admin.teams.col.players"), cPl, y + 4, 10.5f, 0.44f);
+        Kit.caps(g, t, Words.t("admin.teams.col.chunks"), cCh, y + 4, 10.5f, 0.44f);
+        Kit.caps(g, t, Words.t("admin.teams.col.force"), cFo, y + 4, 10.5f, 0.44f);
+        Kit.caps(g, t, Words.t("admin.teams.col.seen"), cSeen, y + 4, 10.5f, 0.44f);
+        y += 10;
+        int rowH = 20, visible = Math.max(1, (wy + wh - 12 - y) / (rowH + 3));
+        teamScroll = Math.max(0, Math.min(teamScroll, a.teams().size() - visible));
+        for (int i = teamScroll; i < a.teams().size() && i < teamScroll + visible; i++) {
+            ClaimsNet.TeamRow r = a.teams().get(i);
+            Draw.roundBox(g, x, y, w, rowH, 5, t.c("card.bg"), t.c("card.border"));
+            float cy = y + rowH / 2f;
+            Draw.round(g, x + 6, cy - 3, 6, 6, 1.5f, r.color());
+            Draw.label(g, Draw.ellipsize(r.name(), 165, 12.5f, Weight.SEMIBOLD), cName, cy, 12.5f, Weight.SEMIBOLD, t.c("text.primary"));
+            Draw.label(g, r.note().isEmpty() ? Integer.toString(r.members()) : "—", cPl, cy, 12, Weight.REGULAR, t.c("text.secondary"));
+            Draw.label(g, Words.t("admin.teams.of", r.claimed(), r.claimLimit()), cCh, cy, 12, Weight.REGULAR, r.claimed() > r.claimLimit() ? deny(t) : t.c("text.secondary"));
+            Draw.label(g, Words.t("admin.teams.of", r.forced(), r.forceLimit()), cFo, cy, 12, Weight.REGULAR, t.c("text.secondary"));
+            String seen = switch (r.note()) {
+                case "ftb" -> Words.t("admin.teams.ftb");
+                case "server" -> Words.t("admin.teams.server");
+                default -> r.online() ? Words.t("admin.teams.online") : r.lastSeen() > 0 ? when(r.lastSeen()) : "—";
+            };
+            Draw.label(g, Draw.ellipsize(seen, 150, 11.5f, Weight.REGULAR), cSeen, cy, 11.5f, Weight.REGULAR, "ftb".equals(r.note()) ? t.c("state.warn") : t.c("text.muted"));
+            String lim = Words.t("admin.teams.limits"), map = Words.t("plots.on_map");
+            int lw = (int) Kit.buttonWidth(lim, 11.5f), mw = (int) Kit.buttonWidth(map, 11.5f);
+            Kit.button(g, t, hits, x + w - 6 - lw, y + 3, lw, 14, lim, false, mx, my, () -> {
+                limitsFor = r.id();
+                limitClaims = r.bonusClaims();
+                limitForce = r.bonusForce();
+            });
+            if (!r.dim().isEmpty()) Kit.button(g, t, hits, x + w - 6 - lw - 4 - mw, y + 3, mw, 14, map, false, mx, my, () -> showOnMap(r.dim(), r.x(), r.z(), r.name()));
+            y += rowH + 3;
+        }
+        if (limitsFor != null && dialog == null) {
+            ClaimsNet.TeamRow row = null;
+            for (ClaimsNet.TeamRow r : a.teams()) if (r.id().equals(limitsFor)) row = r;
+            if (row == null) {
+                limitsFor = null;
+                return;
+            }
+            UUID id = row.id();
+            dialog = new Kit.Dialog(Words.t("admin.limits.title", row.name()))
+                .text(Words.t("admin.limits.text", row.claimLimit() - row.bonusClaims(), row.forceLimit() - row.bonusForce()))
+                .body(40, (gg, bx, by, bw, mxx, myy) -> {
+                    Draw.label(gg, Words.t("admin.limits.claims"), bx, by + 6, 12, Weight.REGULAR, t.c("text.primary"));
+                    Kit.stepper(gg, t, hits, bx + bw - 70, by, 70, Integer.toString(limitClaims), mxx, myy, () -> limitClaims -= 10, () -> limitClaims += 10);
+                    Draw.label(gg, Words.t("admin.limits.force"), bx, by + 26, 12, Weight.REGULAR, t.c("text.primary"));
+                    Kit.stepper(gg, t, hits, bx + bw - 70, by + 20, 70, Integer.toString(limitForce), mxx, myy, () -> limitForce -= 5, () -> limitForce += 5);
+                })
+                .no(Words.t("plots.release.no"), () -> {
+                    dialog = null;
+                    limitsFor = null;
+                })
+                .yes(Words.t("admin.limits.save"), () -> {
+                    dialog = null;
+                    limitsFor = null;
+                    adminEdit("limit", id.toString(), limitClaims + "," + limitForce);
+                });
+        }
+    }
+
     // ---- ввод ----
 
     void toPlayer() {
@@ -1807,6 +2051,10 @@ public final class LandScreen extends ScaledScreen {
             logScroll += sy > 0 ? -2 : 2;
             return true;
         }
+        if (page == Page.TEAMS && sy != 0) {
+            teamScroll += sy > 0 ? -1 : 1;
+            return true;
+        }
         if (overCanvas(x, y) && sy != 0) {
             zoomAt(x, y, sy > 0 ? 1 : -1);
             return true;
@@ -1828,6 +2076,7 @@ public final class LandScreen extends ScaledScreen {
         }
         if (presetDrop.keyPressed(key) || dimDrop.keyPressed(key) || visDrop.keyPressed(key)) return true;
         for (Kit.Dropdown d : menus.values()) if (d.keyPressed(key)) return true;
+        for (Kit.Dropdown d : adminDrops.values()) if (d.keyPressed(key)) return true;
         if (page == Page.GRID) {
             if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && enterAction != null) {
                 enterAction.run();

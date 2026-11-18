@@ -93,7 +93,7 @@ public final class ClaimsNet {
     public record Hello(UUID team, String name, int color, boolean solo, String role, int members,
                         int claimed, int claimLimit, int forced, int forceLimit, int releasing, long releaseIn,
                         boolean canClaim, boolean canForce, boolean canRights, boolean rightsLocked, int rights, int trusted,
-                        int releaseSeconds, boolean bypass, int epoch) implements CustomPacketPayload {
+                        int releaseSeconds, boolean bypass, int epoch, boolean op) implements CustomPacketPayload {
         public static final Type<Hello> TYPE = new Type<>(id("hello"));
         public static final StreamCodec<FriendlyByteBuf, Hello> CODEC = CustomPacketPayload.codec(Hello::write, Hello::read);
 
@@ -101,7 +101,7 @@ public final class ClaimsNet {
             return new Hello(b.readUUID(), b.readUtf(64), b.readInt(), b.readBoolean(), b.readUtf(16), b.readVarInt(),
                 b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarLong(),
                 b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readInt(), b.readVarInt(),
-                b.readVarInt(), b.readBoolean(), b.readVarInt());
+                b.readVarInt(), b.readBoolean(), b.readVarInt(), b.readBoolean());
         }
 
         private void write(FriendlyByteBuf b) {
@@ -126,11 +126,12 @@ public final class ClaimsNet {
             b.writeVarInt(releaseSeconds);
             b.writeBoolean(bypass);
             b.writeVarInt(epoch);
+            b.writeBoolean(op);
         }
 
         public Hello withReleaseIn(long ms) {
             return new Hello(team, name, color, solo, role, members, claimed, claimLimit, forced, forceLimit, releasing, ms,
-                canClaim, canForce, canRights, rightsLocked, rights, trusted, releaseSeconds, bypass, epoch);
+                canClaim, canForce, canRights, rightsLocked, rights, trusted, releaseSeconds, bypass, epoch, op);
         }
 
         @Override
@@ -436,6 +437,99 @@ public final class ClaimsNet {
         }
     }
 
+    /** Строка таблицы команд оператора (макет 52). {@code note}: «ftb» (без пары в RYSTeams), «server», иначе пусто. */
+    public record TeamRow(UUID id, String name, int color, int members, int claimed, int claimLimit, int forced, int forceLimit,
+                          long lastSeen, boolean online, String note, int bonusClaims, int bonusForce, String dim, int x, int z) {
+        static TeamRow read(FriendlyByteBuf b) {
+            return new TeamRow(b.readUUID(), b.readUtf(64), b.readInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(),
+                b.readVarInt(), b.readVarLong(), b.readBoolean(), b.readUtf(16), b.readVarInt(), b.readVarInt(), ClaimsNet.dim(b), b.readVarInt(), b.readVarInt());
+        }
+
+        void write(FriendlyByteBuf b) {
+            b.writeUUID(id);
+            b.writeUtf(name.length() > 64 ? name.substring(0, 64) : name, 64);
+            b.writeInt(color);
+            b.writeVarInt(members);
+            b.writeVarInt(claimed);
+            b.writeVarInt(claimLimit);
+            b.writeVarInt(forced);
+            b.writeVarInt(forceLimit);
+            b.writeVarLong(lastSeen);
+            b.writeBoolean(online);
+            b.writeUtf(note, 16);
+            b.writeVarInt(bonusClaims);
+            b.writeVarInt(bonusForce);
+            b.writeUtf(dim, 128);
+            b.writeVarInt(x);
+            b.writeVarInt(z);
+        }
+    }
+
+    /**
+     * Оператору (макеты 51, 52): правимые настройки сервера (ключ, значение), таблица команд, режим оператора, сколько земли
+     * в мире, можно ли запускать перенос из FTB (уровень 4).
+     */
+    public record AdminState(List<String> keys, List<String> values, List<TeamRow> teams, boolean bypass, int total, boolean canImport)
+        implements CustomPacketPayload {
+        public static final Type<AdminState> TYPE = new Type<>(ClaimsNet.id("admin_state"));
+        public static final StreamCodec<FriendlyByteBuf, AdminState> CODEC = CustomPacketPayload.codec(AdminState::write, AdminState::read);
+
+        private static AdminState read(FriendlyByteBuf b) {
+            int n = b.readVarInt();
+            if (n < 0 || n > 256) throw new DecoderException("слишком много настроек: " + n);
+            List<String> k = new ArrayList<>(n), v = new ArrayList<>(n);
+            for (int i = 0; i < n; i++) {
+                k.add(b.readUtf(64));
+                v.add(b.readUtf(256));
+            }
+            int m = b.readVarInt();
+            if (m < 0 || m > 4096) throw new DecoderException("слишком много команд: " + m);
+            List<TeamRow> teams = new ArrayList<>(m);
+            for (int i = 0; i < m; i++) teams.add(TeamRow.read(b));
+            return new AdminState(k, v, teams, b.readBoolean(), b.readVarInt(), b.readBoolean());
+        }
+
+        private void write(FriendlyByteBuf b) {
+            b.writeVarInt(keys.size());
+            for (int i = 0; i < keys.size(); i++) {
+                b.writeUtf(keys.get(i), 64);
+                String v = values.get(i);
+                b.writeUtf(v.length() > 256 ? v.substring(0, 256) : v, 256);
+            }
+            b.writeVarInt(Math.min(teams.size(), 4096));
+            for (int i = 0; i < teams.size() && i < 4096; i++) teams.get(i).write(b);
+            b.writeBoolean(bypass);
+            b.writeVarInt(total);
+            b.writeBoolean(canImport);
+        }
+
+        public String get(String key) {
+            int i = keys.indexOf(key);
+            return i < 0 ? "" : values.get(i);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Правка оператора: {@code setting} (ключ настройки, значение), {@code bypass} (режим оператора), {@code limit}
+     * (UUID команды, «чанки,прогрузка» добавкой команды), {@code import} и {@code undo} (перенос из FTB), {@code refresh}.
+     */
+    public record AdminEdit(String kind, String key, String value) implements CustomPacketPayload {
+        public static final Type<AdminEdit> TYPE = new Type<>(ClaimsNet.id("admin_edit"));
+        public static final StreamCodec<ByteBuf, AdminEdit> CODEC = StreamCodec.composite(
+            ByteBufCodecs.stringUtf8(16), AdminEdit::kind, ByteBufCodecs.stringUtf8(64), AdminEdit::key,
+            ByteBufCodecs.stringUtf8(256), AdminEdit::value, AdminEdit::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     // ---- серверу ----
 
     /** Подписка: измерение и регионы (упакованы как чанк). Больше {@link #MAX_REGIONS} сервер не держит. */
@@ -566,6 +660,7 @@ public final class ClaimsNet {
         r.playToClient(OwnerAlert.TYPE, OwnerAlert.CODEC, (p, c) -> client(() -> Client.alert(p)));
         r.playToClient(LogPage.TYPE, LogPage.CODEC, (p, c) -> client(() -> Client.log(p)));
         r.playToClient(Question.TYPE, Question.CODEC, (p, c) -> client(() -> Client.question(p)));
+        r.playToClient(AdminState.TYPE, AdminState.CODEC, (p, c) -> client(() -> Client.admin(p)));
         r.playToServer(Subscribe.TYPE, Subscribe.CODEC, (p, c) -> server(c, pl -> ClaimSync.subscribe(pl, p)));
         r.playToServer(Edit.TYPE, Edit.CODEC, (p, c) -> server(c, pl -> ClaimSync.edit(pl, p)));
         r.playToServer(Keep.TYPE, Keep.CODEC, (p, c) -> server(c, ClaimSync::keep));
@@ -573,6 +668,7 @@ public final class ClaimsNet {
         r.playToServer(LandEdit.TYPE, LandEdit.CODEC, (p, c) -> server(c, pl -> ClaimSync.land(pl, p)));
         r.playToServer(LogRequest.TYPE, LogRequest.CODEC, (p, c) -> server(c, ClaimSync::log));
         r.playToServer(Answer.TYPE, Answer.CODEC, (p, c) -> server(c, pl -> works.repka.rysclaims.server.Membership.onAnswer(pl, p)));
+        r.playToServer(AdminEdit.TYPE, AdminEdit.CODEC, (p, c) -> server(c, pl -> works.repka.rysclaims.server.Admin.edit(pl, p)));
     }
 
     private static void client(Runnable r) {
@@ -623,6 +719,10 @@ public final class ClaimsNet {
 
         static void question(Question q) {
             works.repka.rysclaims.client.DenyFeedback.question(q);
+        }
+
+        static void admin(AdminState a) {
+            works.repka.rysclaims.client.LandCache.admin(a);
         }
     }
 

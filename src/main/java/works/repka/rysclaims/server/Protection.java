@@ -247,6 +247,7 @@ public final class Protection {
             case WILDERNESS -> "You can build only on your land";
             case MACHINE -> "Machines are not allowed here";
             case EXPLOSION -> "Explosions do not break blocks here";
+            case OPERATOR -> "Operator edit";
         };
     }
 

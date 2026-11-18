@@ -82,6 +82,8 @@ public final class LandCache {
     private static long stateRevision;
     private static ClaimsNet.@Nullable LogPage log;
     private static long logAt;
+    private static ClaimsNet.@Nullable AdminState admin;
+    private static long adminAt;
 
     private LandCache() {}
 
@@ -138,6 +140,24 @@ public final class LandCache {
         state = s;
         stateRevision++;
         counter++;
+    }
+
+    public static void admin(ClaimsNet.AdminState a) {
+        admin = a;
+        adminAt = System.currentTimeMillis();
+    }
+
+    /** Состояние для страниц оператора или null. */
+    public static ClaimsNet.@Nullable AdminState admin() {
+        return admin;
+    }
+
+    /** Попросить состояние оператора, если оно старше {@code maxAgeMs}. */
+    public static void wantAdmin(long maxAgeMs) {
+        long now = System.currentTimeMillis();
+        if (now - adminAt < maxAgeMs) return;
+        adminAt = now;
+        send(new ClaimsNet.AdminEdit("refresh", "", ""));
     }
 
     public static void log(ClaimsNet.LogPage p) {
@@ -390,6 +410,8 @@ public final class LandCache {
         stateRevision++;
         log = null;
         logAt = 0;
+        admin = null;
+        adminAt = 0;
         counter++;
         lastSubscribe = 0;
     }

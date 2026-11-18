@@ -669,7 +669,9 @@ public final class ClaimService {
         /** Машина: профиль не участник, место неизвестно или снаружи. */
         MACHINE,
         /** Взрыв не тронул блоки земли (только журнал). */
-        EXPLOSION;
+        EXPLOSION,
+        /** Оператор правил землю команды в режиме оператора (только журнал). */
+        OPERATOR;
 
         public String key() {
             return name().toLowerCase(java.util.Locale.ROOT);
