@@ -96,6 +96,38 @@ public final class CrossGameTests {
         BordersGameTests.done(h);
     }
 
+    /**
+     * Снаряд без хозяина (раздатчик) судится чанком, где появился (перепроверка 18.11, пункт 4): огненный заряд со свободной
+     * земли по блоку команды не попадает и пропадает, по своей земле попадает.
+     */
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void ownerlessProjectile(GameTestHelper h) {
+        ServerLevel level = h.getLevel();
+        BlockPos corner = base(5);
+        BlockPos from = corner.offset(15, 2, 8), target = corner.offset(16, 1, 8);
+        UUID team = UUID.randomUUID();
+        claim(level, team, target);
+        try {
+            net.minecraft.world.entity.projectile.SmallFireball ball = new net.minecraft.world.entity.projectile.SmallFireball(
+                net.minecraft.world.entity.EntityType.SMALL_FIREBALL, level);
+            ball.setPos(from.getX() + 0.5, from.getY() + 0.5, from.getZ() + 0.5);
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new net.neoforged.neoforge.event.entity.EntityJoinLevelEvent(ball, level));
+            var hit = new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(target), Direction.UP, target, false);
+            if (!net.neoforged.neoforge.event.EventHooks.onProjectileImpact(ball, hit)) h.fail("заряд со свободной земли попал в блок команды");
+            if (!ball.isRemoved()) h.fail("снаряд без хозяина не пропал после отказа");
+
+            claim(level, team, from);
+            net.minecraft.world.entity.projectile.SmallFireball own = new net.minecraft.world.entity.projectile.SmallFireball(
+                net.minecraft.world.entity.EntityType.SMALL_FIREBALL, level);
+            own.setPos(from.getX() + 0.5, from.getY() + 0.5, from.getZ() + 0.5);
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new net.neoforged.neoforge.event.entity.EntityJoinLevelEvent(own, level));
+            if (net.neoforged.neoforge.event.EventHooks.onProjectileImpact(own, hit)) h.fail("заряд со своей земли не попадает в свой блок");
+        } finally {
+            free(level, from, target);
+        }
+        BordersGameTests.done(h);
+    }
+
     /** Выбрасыватель не кладёт в сундук за границей; раздатчик не ставит шалкер на землю другой команды. */
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void dispenserAcrossBorder(GameTestHelper h) {

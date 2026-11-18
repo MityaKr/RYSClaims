@@ -94,6 +94,7 @@ public final class Protection {
         bus.addListener(EventPriority.HIGH, LivingIncomingDamageEvent.class, Protection::onDamage);
         bus.addListener(EventPriority.HIGH, BlockEvent.FarmlandTrampleEvent.class, Protection::onTrample);
         bus.addListener(EventPriority.HIGH, ProjectileImpactEvent.class, Protection::onProjectile);
+        bus.addListener(EventPriority.LOW, net.neoforged.neoforge.event.entity.EntityJoinLevelEvent.class, Protection::onJoinLevel);
         bus.addListener(EventPriority.HIGH, ExplosionEvent.Detonate.class, Protection::onDetonate);
         bus.addListener(EventPriority.LOW, EntityMobGriefingEvent.class, Protection::onMobGrief);
         bus.addListener(EventPriority.HIGH, LivingDestroyBlockEvent.class, e -> {
@@ -456,8 +457,43 @@ public final class Protection {
         return true;
     }
 
+    /** Чанк, где появился снаряд без хозяина (раздатчик): по нему судится попадание (перепроверка 18.11, пункт 4). */
+    private static final String SPAWN = "rysclaims:spawn";
+
+    private static void onJoinLevel(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent e) {
+        if (e.loadedFromDisk() || !(e.getEntity() instanceof Projectile proj) || e.getLevel().isClientSide) return;
+        if (proj.getOwner() != null || proj.getPersistentData().contains(SPAWN)) return;
+        proj.getPersistentData().putLong(SPAWN, Chunks.pack(proj.getBlockX() >> 4, proj.getBlockZ() >> 4));
+    }
+
+    /**
+     * Снаряд без хозяина (стрела, огненный заряд, зелье из раздатчика) по блоку или сущности на земле другой команды, чем
+     * чанк его появления: попадания нет, снаряд пропадает. Огненный заряд ставит огонь в {@code onHitBlock} без события,
+     * стрела ломает рамки и картины. Настройка воронок и раздатчиков через границу снимает запрет. Снаряд без пометки
+     * (появился до 0.0.29) не судится.
+     */
+    private static boolean ownerlessMay(Projectile proj, HitResult hit) {
+        if (!proj.getPersistentData().contains(SPAWN)) return true;
+        ClaimService s = service(proj.level());
+        if (s == null) return true;
+        String dim = Loader.id(proj.level().dimension());
+        if (!s.data().anyIn(dim)) return true;
+        BlockPos at = hit instanceof BlockHitResult bh ? bh.getBlockPos() : hit instanceof EntityHitResult eh ? eh.getEntity().blockPosition() : null;
+        if (at == null) return true;
+        if (hit instanceof EntityHitResult eh && (eh.getEntity() instanceof Player || eh.getEntity() instanceof Enemy)) return true;
+        BlockPos w = SableLand.toWorld(proj.level(), at);
+        return s.mayCross(dim, proj.getPersistentData().getLong(SPAWN), Chunks.pack(w.getX() >> 4, w.getZ() >> 4), s.settings().hoppersCross);
+    }
+
     private static void onProjectile(ProjectileImpactEvent e) {
         Projectile proj = e.getProjectile();
+        if (proj.getOwner() == null) {
+            if (!proj.level().isClientSide && !ownerlessMay(proj, e.getRayTraceResult())) {
+                e.setCanceled(true);
+                proj.discard();
+            }
+            return;
+        }
         if (!(proj.getOwner() instanceof Player owner)) return;
         if (e.getRayTraceResult() instanceof EntityHitResult hit) {
             Entity target = hit.getEntity();
