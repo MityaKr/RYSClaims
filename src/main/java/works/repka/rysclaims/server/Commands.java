@@ -26,6 +26,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.jetbrains.annotations.Nullable;
+import works.repka.ryscore.migrate.Migrations;
 import works.repka.ryscore.team.TeamsApi;
 import works.repka.rysclaims.data.Chunks;
 import works.repka.rysclaims.data.Claim;
@@ -35,6 +36,7 @@ import works.repka.rysclaims.data.Plots;
 import works.repka.rysclaims.data.Rights;
 import works.repka.rysclaims.data.Settings;
 import works.repka.rysclaims.data.TeamLand;
+import works.repka.rysclaims.migrate.ClaimsStep;
 
 /**
  * Команды {@code /claims} первого выпуска (план, раздел 6). Каждая проверяет те же права, что и окно: право управления
@@ -144,6 +146,9 @@ public final class Commands {
             .then(lit("force").then(net.minecraft.commands.Commands.argument("n", IntegerArgumentType.integer(-1_000_000, 1_000_000))
                 .executes(c -> playerBonus(c, false))))));
         node.then(lit("loaded").executes(Commands::loaded));
+        node.then(lit("import").requires(s -> s.hasPermission(4))
+            .then(lit("ftb").executes(c -> imported(c, false)))
+            .then(lit("undo").executes(c -> imported(c, true))));
         return node;
     }
 
@@ -495,6 +500,18 @@ public final class Commands {
             done++;
         }
         return done;
+    }
+
+    /** Тот же шаг ядра, что {@code /rys migrate run claims} и {@code undo claims}: отчёт в лог и сюда. */
+    private static int imported(CommandContext<CommandSourceStack> c, boolean undo) throws CommandSyntaxException {
+        service();
+        MinecraftServer server = c.getSource().getServer();
+        Migrations.Outcome o = undo ? Migrations.undo(ClaimsStep.ID, server) : Migrations.runManual(ClaimsStep.ID, server);
+        MutableComponent line = Msg.t("import.result", "Land from FTB Chunks: %s %s", o.status().name(), o.message());
+        if (o.status() == Migrations.Status.FAILED) return fail(c.getSource(), line);
+        c.getSource().sendSuccess(() -> line, true);
+        if (o.report() != null) for (String l : o.report().lines()) c.getSource().sendSuccess(() -> Component.literal("  " + l).withStyle(ChatFormatting.GRAY), false);
+        return 1;
     }
 
     private static int loaded(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {

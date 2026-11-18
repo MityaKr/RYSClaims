@@ -75,6 +75,12 @@ public final class TeamLand {
     public final List<String> machineNames = new ArrayList<>();
     /** Команда FTB без пары в RYSTeams: имя и источник. */
     public @Nullable String legacyName, legacySource;
+    /**
+     * Участники команды FTB без пары: на её земле они остаются «своими» (доступ по столбцу команды, владелец FTB как
+     * лидер), но управлять землёй не могут, пока оператор не решит её судьбу.
+     */
+    public final Set<UUID> legacyMembers = new LinkedHashSet<>();
+    public @Nullable UUID legacyOwner;
     /** Участки (0.2): хранятся как есть. */
     public ListTag plots = new ListTag();
 
@@ -135,6 +141,10 @@ public final class TeamLand {
             CompoundTag l = new CompoundTag();
             l.putString("name", legacyName);
             l.putString("source", legacySource == null ? "" : legacySource);
+            ListTag lm = new ListTag();
+            for (UUID u : legacyMembers) lm.add(StringTag.valueOf(u.toString()));
+            l.put("members", lm);
+            if (legacyOwner != null) l.putUUID("owner", legacyOwner);
             t.put("legacy", l);
         }
         t.put("plots", plots.copy());
@@ -164,6 +174,14 @@ public final class TeamLand {
             CompoundTag l = t.getCompound("legacy");
             land.legacyName = l.getString("name");
             land.legacySource = l.getString("source");
+            for (Tag u : l.getList("members", Tag.TAG_STRING)) {
+                try {
+                    land.legacyMembers.add(UUID.fromString(u.getAsString()));
+                } catch (IllegalArgumentException ignored) {
+                    // битая строка не мешает остальным
+                }
+            }
+            if (l.hasUUID("owner")) land.legacyOwner = l.getUUID("owner");
         }
         land.plots = t.getList("plots", Tag.TAG_COMPOUND).copy();
         return land;

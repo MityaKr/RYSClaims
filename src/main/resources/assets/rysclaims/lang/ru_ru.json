@@ -18,6 +18,7 @@
   "rysclaims.error.not_running": "Земля ещё не загружена",
   "rysclaims.error.rights_locked": "Сервер не даёт командам менять права",
   "rysclaims.flag.set": "%s: %s",
+  "rysclaims.import.result": "Земля из FTB Chunks: %s %s",
   "rysclaims.info.bypass": "режим оператора: защита снята",
   "rysclaims.info.free": "Чанк %s, %s: свободная земля",
   "rysclaims.info.loaded": "прогружен",

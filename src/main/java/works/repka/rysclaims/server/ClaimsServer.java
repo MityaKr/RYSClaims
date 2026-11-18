@@ -83,6 +83,15 @@ public final class ClaimsServer {
         loaderDirty = true;
     }
 
+    /** Пишет файл земли сейчас, а не при очередном сохранении мира: переезд делает необратимое только после записи. */
+    public static void saveNow() {
+        MinecraftServer srv = server;
+        ClaimSavedData d = saved;
+        if (srv == null || d == null) return;
+        d.setDirty();
+        srv.overworld().getDataStorage().save();
+    }
+
     public static void markDirty() {
         ClaimSavedData d = saved;
         if (d != null) d.setDirty();

@@ -91,6 +91,14 @@ public final class Rights {
         if (preset == Preset.OPEN) s.add(ALL);
     }
 
+    /** Набор, которому соответствует строка действия: «все» значит открытая, «союзники» значит с союзом. */
+    public Preset presetOf(Action a) {
+        Set<String> s = table.get(a);
+        if (s.contains(ALL)) return Preset.OPEN;
+        if (s.contains(ALLIES)) return Preset.TEAM_AND_ALLIES;
+        return Preset.TEAM;
+    }
+
     public @Nullable Preset preset() {
         for (Preset p : Preset.values()) if (equals(of(p))) return p;
         return null;

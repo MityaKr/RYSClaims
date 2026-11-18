@@ -1,0 +1,10 @@
+{
+	id: "cccccccc-0000-0000-0000-000000000001"
+	type: "server"
+	ranks: { }
+	properties: {
+		"ftbteams:display_name": "Spawn"
+		"ftbchunks:block_edit_mode": "private"
+		"ftbchunks:block_interact_mode": "public"
+	}
+}

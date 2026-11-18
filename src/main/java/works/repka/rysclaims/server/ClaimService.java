@@ -405,10 +405,11 @@ public final class ClaimService {
     /** Кем игрок приходится хозяину земли. */
     public Rights.Relation relation(UUID player, UUID owner) {
         if (player.equals(owner) || teams.teamOf(player).equals(owner)) return Rights.Relation.TEAM;
+        TeamLand land = data.land(owner);
+        if (land != null && land.legacyMembers.contains(player)) return Rights.Relation.TEAM;
         Settings s = settings.get();
         if (s.allyMode == Settings.AllyMode.ALL) return Rights.Relation.ALLY;
         if (s.allyMode == Settings.AllyMode.NONE) return Rights.Relation.OTHER;
-        TeamLand land = data.land(owner);
         if (land != null && land.trusted.contains(player)) return Rights.Relation.ALLY;
         if (teams.allies(owner).contains(teams.teamOf(player))) return Rights.Relation.ALLY;
         return Rights.Relation.OTHER;
@@ -423,7 +424,11 @@ public final class ClaimService {
         Rights.Relation rel = relation(player, owner);
         TeamLand land = data.land(owner);
         Rights rights = land == null ? s.defaultRights : land.rights;
-        String role = rel == Rights.Relation.TEAM && !player.equals(owner) ? teams.roleOf(player) : null;
+        String role = null;
+        if (rel == Rights.Relation.TEAM && !player.equals(owner)) {
+            if (land != null && land.legacyMembers.contains(player)) role = player.equals(land.legacyOwner) ? Rights.LEADER : Rights.MEMBER;
+            else role = teams.roleOf(player);
+        }
         return rights.allows(action, rel, role);
     }
 

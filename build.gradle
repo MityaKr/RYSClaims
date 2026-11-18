@@ -51,6 +51,7 @@ neoForge {
             type = 'gameTestServer'
             gameDirectory = project.file('run-server')
             systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+            systemProperty 'rysclaims.samples', project.file('src/test/resources/ftb').absolutePath
             jvmArguments.addAll '-Xmx2G'
         }
     }

@@ -18,6 +18,7 @@
   "rysclaims.error.not_running": "Land is not loaded yet",
   "rysclaims.error.rights_locked": "The server does not let teams change rights",
   "rysclaims.flag.set": "%s: %s",
+  "rysclaims.import.result": "Land from FTB Chunks: %s %s",
   "rysclaims.info.bypass": "operator mode: protection off",
   "rysclaims.info.free": "Chunk %s, %s: unclaimed land",
   "rysclaims.info.loaded": "force loaded",

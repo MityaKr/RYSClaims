@@ -9,7 +9,7 @@
 | `v` | версия формата, сейчас 1; файл новее мода не читается (ошибка, а не затирание) |
 | `edits` | число правок земли игроками и операторами: откат переезда отказывает, если оно выросло |
 | `ids` | UUID команд по номерам; поле `team` у чанка это номер в этом списке |
-| `teams.<uuid>` | `bonusClaims`, `bonusForce` (добавка команде), `lastSeen`, `loadMode` (`online`/`always`), `loadHours` (0.2), `visibility` (`all`/`allies`/`team`), `rights` (`build`, `open`, `use`, `entity`: списки столбцов), `flags` (`ownExplosions`, `mobGrief`, `pvp`, `machinesInside`, `machinesOutside`, `machinesProfile`), `trusted`, `machineNames`, `legacy {name, source}` (команда FTB без пары), `plots` (0.2) |
+| `teams.<uuid>` | `bonusClaims`, `bonusForce` (добавка команде), `lastSeen`, `loadMode` (`online`/`always`), `loadHours` (0.2), `visibility` (`all`/`allies`/`team`), `rights` (`build`, `open`, `use`, `entity`: списки столбцов), `flags` (`ownExplosions`, `mobGrief`, `pvp`, `machinesInside`, `machinesOutside`, `machinesProfile`), `trusted`, `machineNames`, `legacy {name, source, members, owner}` (команда FTB без пары: её участники остаются своими), `plots` (0.2) |
 | `claims.<измерение>` | список `{pos, team, by?, at, plot, force, releaseAt}`; `pos` как `ChunkPos.asLong`, время в мс от эпохи |
 | `players.<uuid>` | личные добавки `bonusClaims`, `bonusForce`: уходят с игроком |
 | `archive` | распавшиеся команды (0.2), хранится как есть |
@@ -36,3 +36,22 @@
 Строки `build`, `open`, `use`, `entity` на столбцы `leader`, `officer`, `member`, `guest`, `allies`, `all`. В 0.1 три столбца: команда (лидер, офицер, участник), союзники (союзные команды RYSTeams и доверенные игроки), все. Гость получает столбец «Союзники». Лидеру своей земли можно всё. Наборы: `team`, `team_and_allies`, `open`; права новых команд задаёт сервер построчно (`[newTeams]`).
 
 Машины (`ClaimsApi.canMachine`): профиль участника с его правами (`machinesProfile`), затем место (машина на земле той же команды не дальше 2 чанков, `machinesInside`), иначе `machinesOutside`.
+
+## Переезд с FTB Chunks (шаг `claims`)
+
+| FTB | RYSClaims |
+|---|---|
+| чанк команды, `time`, `force_loaded` | чанк той же команды, время занятия, прогрузка включена |
+| команда с парой в RYSTeams (тот же UUID) | та же команда |
+| все игроки команды уже в RYSTeams | команда RYSTeams владельца |
+| команда без пары, серверная команда | старый UUID, `legacy`; участники остаются своими |
+| личная команда игрока | личная земля |
+| `extra_claim_chunks`, `extra_force_load_chunks` личного файла | личная добавка игрока |
+| `max_claim_chunks`, `max_force_load_chunks` файла команды | наш лимит не меньше; разница добавкой команде |
+| `block_edit_mode`, `block_interact_mode`, `entity_interact_mode` + `nonliving_entity_attack_mode` | строки «строить», «открывать» и «двери», «животные» (по более строгому) |
+| `allow_explosions`, `allow_mob_griefing`, `allow_pvp`, `allow_fake_players_by_id`, `allow_fake_players` | `ownExplosions`, `mobGrief`, `pvp`, `machinesProfile`, `machinesOutside`; `machinesInside` включён |
+| `allow_named_fake_players`, `claim_visibility` | `machineNames`, `visibility` |
+| ранг `ally` | доверенный игрок |
+| `ftbchunks-world.snbt` | `rysclaims-server.toml`, если его ещё не трогали |
+
+Не переносятся: `expiry_time` (срок задаёт режим сервера), `prevented_access` (журнал в 0.2), `original_claims` (поле `by` в 0.2). Всё это видно строками отчёта.

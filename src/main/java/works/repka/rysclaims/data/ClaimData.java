@@ -206,6 +206,25 @@ public final class ClaimData {
         }
     }
 
+    /** Заменяет всё содержимое посчитанной базой: переезд кладёт её одним шагом. Счётчик правок не меняется. */
+    public void replaceWith(ClaimData other) {
+        dims.clear();
+        dims.putAll(other.dims);
+        teams.clear();
+        teams.putAll(other.teams);
+        players.clear();
+        players.putAll(other.players);
+        archive = other.archive.copy();
+    }
+
+    /** Пустая база: откат переезда. Счётчик правок не меняется. */
+    public void clear() {
+        dims.clear();
+        teams.clear();
+        players.clear();
+        archive = new ListTag();
+    }
+
     /** Отмечает правку земли игроком или оператором (не переездом). */
     public void edited() {
         edits++;

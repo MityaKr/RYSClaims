@@ -1,0 +1,7 @@
+{
+	max_claim_chunks: 500
+	max_force_load_chunks: 25
+	chunks: {
+		"minecraft:overworld": [{ x: 0, z: 0, time: 1790000000000L, expiry_time: 1800000000000L }]
+	}
+}

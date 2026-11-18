@@ -19,8 +19,10 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import works.repka.ryscore.claims.ClaimsApi;
+import works.repka.ryscore.migrate.Migrations;
 import works.repka.ryscore.team.TeamsApi;
 import works.repka.rysclaims.api.ClaimsApiImpl;
+import works.repka.rysclaims.migrate.ClaimsStep;
 import works.repka.rysclaims.server.ClaimService;
 import works.repka.rysclaims.server.ClaimsServer;
 import works.repka.rysclaims.server.Commands;
@@ -28,7 +30,7 @@ import works.repka.rysclaims.server.Loader;
 import works.repka.rysclaims.server.ServerConfig;
 import works.repka.rysclaims.server.TeamHooks;
 
-/** Точка входа: общая для клиента и сервера. В 0.0.x только серверная часть: земля, лимиты, прогрузка, команды. */
+/** Точка входа: общая для клиента и сервера. В 0.0.x только серверная часть: земля, лимиты, прогрузка, команды, переезд. */
 @Mod(RYSClaims.MODID)
 public final class RYSClaims {
     public static final String MODID = "rysclaims";
@@ -49,6 +51,8 @@ public final class RYSClaims {
         teams.registerPermission(ClaimService.PERM_RIGHTS, Component.translatableWithFallback("rysclaims.perm.rights", "Change land rights"),
             Set.of(TeamsApi.LEADER));
         TeamsApi.listen(new TeamHooks());
+        // переезд с FTB Chunks: шаг ядра, порядок 30
+        Migrations.register(new ClaimsStep());
 
         // земля поднимается раньше переезда ядра (ServerStartedEvent) и раньше остальных модов
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGH, (ServerStartingEvent e) -> ClaimsServer.start(e.getServer()));

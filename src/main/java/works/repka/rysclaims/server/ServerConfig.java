@@ -114,6 +114,50 @@ public final class ServerConfig {
         return s;
     }
 
+    private static List<ModConfigSpec.ConfigValue<?>> all() {
+        return List.of(CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, BONUS_MODE, MAX_LOAD, ALLY_MODE,
+            PVP_MODE, DISABLED, ONLY, NO_WILD_DIMS, ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS, DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY);
+    }
+
+    /**
+     * Файл ещё не трогали: все значения по умолчанию. Игра создаёт файл до запуска шагов переезда, поэтому «файла ещё нет»
+     * из плана (10.5) проверяется так.
+     */
+    public static boolean untouched() {
+        if (!SPEC.isLoaded()) return false;
+        for (ModConfigSpec.ConfigValue<?> v : all()) if (!java.util.Objects.equals(v.get(), v.getDefault())) return false;
+        return true;
+    }
+
+    /** Записывает настройки в файл (перенос настроек FTB). */
+    public static void write(Settings s) {
+        if (!SPEC.isLoaded()) return;
+        CLAIMS.set(s.claimsPerTeam);
+        FORCE.set(s.forcePerTeam);
+        CLAIMS_MEMBER.set(s.claimsPerMember);
+        FORCE_MEMBER.set(s.forcePerMember);
+        BONUS_MODE.set(s.bonusMode.key());
+        HARD_CLAIMS.set(s.hardClaims);
+        HARD_FORCE.set(s.hardForce);
+        DISABLED.set(List.copyOf(s.disabledDimensions));
+        ONLY.set(List.copyOf(s.onlyDimensions));
+        ADJACENT.set(s.adjacentOnly);
+        RELEASE.set(s.releaseSeconds);
+        MAX_LOAD.set(s.maxLoad.key());
+        PROTECTION.set(s.protection);
+        ALLY_MODE.set(s.allyMode.name().toLowerCase(java.util.Locale.ROOT));
+        PVP_MODE.set(s.pvpMode.name().toLowerCase(java.util.Locale.ROOT));
+        NO_WILD.set(s.noWilderness);
+        NO_WILD_DIMS.set(List.copyOf(s.noWildernessDimensions));
+        EDIT_RIGHTS.set(s.teamsEditRights);
+        DEF_BUILD.set(s.defaultRights.presetOf(Rights.Action.BUILD).key());
+        DEF_OPEN.set(s.defaultRights.presetOf(Rights.Action.OPEN).key());
+        DEF_USE.set(s.defaultRights.presetOf(Rights.Action.USE).key());
+        DEF_ENTITY.set(s.defaultRights.presetOf(Rights.Action.ENTITY).key());
+        SPEC.save();
+        invalidate();
+    }
+
     private static Rights.Preset preset(ModConfigSpec.ConfigValue<String> v) {
         Rights.Preset p = Rights.Preset.parse(v.get());
         return p == null ? Rights.Preset.TEAM : p;
