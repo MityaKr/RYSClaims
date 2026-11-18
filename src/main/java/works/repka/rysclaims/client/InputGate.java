@@ -119,6 +119,10 @@ public final class InputGate {
     /** Сущности, которые сервер защищает правом «Животные, рамки, стойки» без условий, видимых только ему. */
     private static boolean guarded(LocalPlayer p, Entity target) {
         if (target instanceof OwnableEntity own && p.getUUID().equals(own.getOwnerUUID())) return false;
+        // монстров сервер не защищает (хоглин это Animal и Enemy); нападающего моба тоже, а цель моба клиент не знает,
+        // поэтому злой моб (флаг агрессии синхронизирован) решается сервером (перепроверка 18.11, пункт 6)
+        if (target instanceof net.minecraft.world.entity.monster.Enemy) return false;
+        if (target instanceof net.minecraft.world.entity.Mob mob && (mob.isAggressive() || mob.getTarget() == p)) return false;
         if (target instanceof HangingEntity || target instanceof ArmorStand || target instanceof VehicleEntity) return true;
         if (target instanceof AbstractVillager) return true;
         return target instanceof Animal && !(target instanceof NeutralMob) && !(target instanceof OwnableEntity);
