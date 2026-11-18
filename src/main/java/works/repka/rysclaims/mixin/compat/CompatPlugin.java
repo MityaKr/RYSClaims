@@ -24,7 +24,9 @@ public final class CompatPlugin implements IMixinConfigPlugin {
         Map.entry("Occultism", "occultism"),
         Map.entry("Draconic", "draconicevolution"),
         Map.entry("Sable", "sable"),
-        Map.entry("Create", "create"));
+        Map.entry("Create", "create"),
+        Map.entry("Foregoing", "industrialforegoing"),
+        Map.entry("ProductiveBees", "productivebees"));
 
     @Override
     public void onLoad(String mixinPackage) {}

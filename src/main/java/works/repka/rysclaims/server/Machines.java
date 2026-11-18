@@ -1,6 +1,7 @@
 package works.repka.rysclaims.server;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -8,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.OwnableEntity;
+import net.minecraft.world.entity.animal.Bee;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -124,6 +126,42 @@ public final class Machines {
             try {
                 return type.getField("blockEntity");
             } catch (NoSuchFieldException e) {
+                return null;
+            }
+        }
+    };
+
+    /** Пчела (Productive Bees): место это её улей, хозяина нет; без улья место неизвестно. */
+    public static boolean bee(Object self, BlockPos target) {
+        if (!(self instanceof Entity bee)) return true;
+        BlockPos hive = bee instanceof Bee b ? b.getHivePos() : null;
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(bee.getType());
+        return at(bee.level(), hive, null, target, id.toString(), FAR);
+    }
+
+    /**
+     * Вспышка маны Botania без хозяина (из распределителя; линза бура ломает {@code destroyBlock} после
+     * {@code Projectile.mayInteract}): место это блок-источник вспышки {@code getBurstSourceBlockPos()}. Не вспышка: true.
+     */
+    public static boolean burst(Entity projectile, Level level, BlockPos target) {
+        Method m = BURST.get(projectile.getClass());
+        if (m == null) return true;
+        BlockPos source;
+        try {
+            source = m.invoke(projectile) instanceof BlockPos p ? p : null;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return true;
+        }
+        if (source != null && level.isOutsideBuildHeight(source)) source = null; // ManaBurst.NO_SOURCE
+        return at(level, source, null, target, "botania:mana_burst", FAR);
+    }
+
+    private static final ClassValue<Method> BURST = new ClassValue<>() {
+        @Override
+        protected Method computeValue(Class<?> type) {
+            try {
+                return type.getMethod("getBurstSourceBlockPos");
+            } catch (NoSuchMethodException e) {
                 return null;
             }
         }

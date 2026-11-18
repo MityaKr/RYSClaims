@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import works.repka.rysclaims.data.Rights;
+import works.repka.rysclaims.server.Machines;
 import works.repka.rysclaims.server.Protection;
 
 /**
@@ -26,6 +27,8 @@ abstract class ProjectileMixin {
         if (owner instanceof Player p) {
             if (!Protection.check(p, level, pos, Rights.Action.BUILD)) cir.setReturnValue(false);
         } else if (owner instanceof Enemy && !Protection.mobMayGrief(owner, level, pos)) {
+            cir.setReturnValue(false);
+        } else if (owner == null && !Machines.burst((Projectile) (Object) this, level, pos)) {
             cir.setReturnValue(false);
         }
     }
