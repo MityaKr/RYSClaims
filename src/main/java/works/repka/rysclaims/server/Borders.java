@@ -10,7 +10,8 @@ import works.repka.rysclaims.data.Chunks;
 import works.repka.rysclaims.data.Rights;
 
 /**
- * Через границу земли без игрока (план, раздел 11, строки 19, 20): вода и лава, огонь, молния. Зовутся из перехватов
+ * Через границу земли без игрока (план, раздел 11, строки 7, 19–28): вода и лава, огонь, молния, воронки, раздатчики,
+ * падающие блоки, скалк, плиты и растяжки, рост деревьев и лиан. Зовутся из перехватов
  * {@code mixin/} тысячи раз за тик, поэтому сначала сравниваются номера чанков двух позиций: внутри одного чанка ответ
  * сразу, поиск в таблице только на границе чанков и только если в измерении есть земля.
  */
@@ -36,6 +37,96 @@ public final class Borders {
         ClaimService s = service(level);
         if (s == null) return true;
         return cross(s, level, from, to, s.settings().fireCross);
+    }
+
+    /** Воронка, выбрасыватель, раздатчик из {@code from} в {@code to}: на землю другой команды только с настройкой сервера. */
+    public static boolean hopper(Level level, BlockPos from, BlockPos to) {
+        if (((from.getX() ^ to.getX()) >> 4) == 0 && ((from.getZ() ^ to.getZ()) >> 4) == 0) return true;
+        ClaimService s = service(level);
+        if (s == null) return true;
+        return cross(s, level, from, to, s.settings().hoppersCross);
+    }
+
+    /** Падающий блок, начавший падение в {@code start}, ложится в {@code to}: вместе с поршнями. */
+    public static boolean falling(Level level, BlockPos start, BlockPos to) {
+        if (((start.getX() ^ to.getX()) >> 4) == 0 && ((start.getZ() ^ to.getZ()) >> 4) == 0) return true;
+        ClaimService s = service(level);
+        if (s == null) return true;
+        return cross(s, level, start, to, s.settings().pistonsCross);
+    }
+
+    /** Заряд скалка от катализатора в {@code origin} переходит в {@code to}: вместе с огнём. */
+    public static boolean sculk(Object level, BlockPos origin, BlockPos to) {
+        if (((origin.getX() ^ to.getX()) >> 4) == 0 && ((origin.getZ() ^ to.getZ()) >> 4) == 0) return true;
+        ClaimService s = service(level);
+        if (s == null) return true;
+        return cross(s, (Level) level, origin, to, s.settings().fireCross);
+    }
+
+    /**
+     * Вагонетка с воронкой (строка 27): команда земли, где её поставили (запоминается при первой работе в данных сущности);
+     * на земле другой команды она не тянет, если сервер не разрешил воронкам ходить через границу.
+     */
+    public static boolean minecartHopper(net.minecraft.world.entity.Entity cart) {
+        ClaimService s = service(cart.level());
+        if (s == null || s.settings().hoppersCross || !s.settings().protection) return true;
+        String dim = Loader.id(cart.level().dimension());
+        net.minecraft.nbt.CompoundTag data = cart.getPersistentData();
+        java.util.UUID here = s.data().owner(dim, Chunks.pack(cart.getBlockX() >> 4, cart.getBlockZ() >> 4));
+        if (!data.contains(HOME)) {
+            data.putString(HOME, here == null ? "" : here.toString());
+            return true;
+        }
+        if (here == null) return true;
+        return here.toString().equals(data.getString(HOME));
+    }
+
+    private static final String HOME = "rysclaims:home";
+
+    /**
+     * Плита, растяжка, кнопка от стрелы на земле команды (строка 7): игрок и снаряд игрока жмут её, только если у игрока
+     * есть «Двери, кнопки, рычаги». Мобы и снаряды без хозяина жмут, как в игре.
+     */
+    public static boolean triggers(Level level, BlockPos pos, net.minecraft.world.entity.Entity e) {
+        net.minecraft.world.entity.player.Player player = null;
+        if (e instanceof net.minecraft.world.entity.player.Player p) player = p;
+        else if (e instanceof net.minecraft.world.entity.projectile.Projectile proj && proj.getOwner() instanceof net.minecraft.world.entity.player.Player p) player = p;
+        return player == null || Protection.allowed(player, level, pos, Rights.Action.USE);
+    }
+
+    /** Убирает из списка тех, кто не может нажать плиту или растяжку в {@code pos}. Зовётся перехватами, только на сервере. */
+    public static <T extends net.minecraft.world.entity.Entity> java.util.List<T> pressers(Level level, BlockPos pos, java.util.List<T> list) {
+        if (list.isEmpty() || service(level) == null) return list;
+        ClaimService s = ClaimsServer.service();
+        String dim = Loader.id(level.dimension());
+        if (!s.data().anyIn(dim) || s.data().owner(dim, Chunks.pack(pos.getX() >> 4, pos.getZ() >> 4)) == null) return list;
+        java.util.List<T> out = null;
+        for (int i = 0; i < list.size(); i++) {
+            T e = list.get(i);
+            boolean ok = triggers(level, pos, e);
+            if (!ok && out == null) out = new java.util.ArrayList<>(list.subList(0, i));
+            else if (ok && out != null) out.add(e);
+        }
+        return out == null ? list : out;
+    }
+
+    /**
+     * Рост дерева, гриба, азалии (строка 22): кто посадил саженец, игра не хранит, поэтому правило по земле. Рост
+     * отменяется, если в радиусе {@code radius} блоков есть земля другой команды, чем под саженцем.
+     */
+    public static boolean growth(Level level, BlockPos pos, int radius) {
+        ClaimService s = service(level);
+        if (s == null || !s.settings().protection) return true;
+        String dim = Loader.id(level.dimension());
+        if (!s.data().anyIn(dim)) return true;
+        java.util.UUID home = s.data().owner(dim, Chunks.pack(pos.getX() >> 4, pos.getZ() >> 4));
+        for (int cx = (pos.getX() - radius) >> 4; cx <= (pos.getX() + radius) >> 4; cx++) {
+            for (int cz = (pos.getZ() - radius) >> 4; cz <= (pos.getZ() + radius) >> 4; cz++) {
+                java.util.UUID o = s.data().owner(dim, Chunks.pack(cx, cz));
+                if (o != null && !o.equals(home)) return false;
+            }
+        }
+        return true;
     }
 
     private static boolean cross(ClaimService s, Level level, BlockPos from, BlockPos to, boolean allowed) {

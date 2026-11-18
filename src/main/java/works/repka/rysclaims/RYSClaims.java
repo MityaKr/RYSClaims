@@ -67,6 +67,7 @@ public final class RYSClaims {
             Protection.clear();
         });
         Protection.register(NeoForge.EVENT_BUS);
+        works.repka.rysclaims.server.Growth.register(NeoForge.EVENT_BUS);
         NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post e) -> ClaimsServer.tick());
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent e) -> {
             if (e.getEntity() instanceof ServerPlayer p && !(p instanceof FakePlayer)) ClaimsServer.login(p);

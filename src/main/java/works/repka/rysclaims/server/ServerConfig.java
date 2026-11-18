@@ -16,7 +16,7 @@ public final class ServerConfig {
 
     private static final ModConfigSpec.IntValue CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, LOG_DAYS;
     private static final ModConfigSpec.ConfigValue<String> BONUS_MODE, MAX_LOAD, ALLY_MODE, PVP_MODE, OWNERLESS;
-    private static final ModConfigSpec.BooleanValue FLUIDS, FIRE, PISTONS;
+    private static final ModConfigSpec.BooleanValue FLUIDS, FIRE, PISTONS, HOPPERS;
     private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED, ONLY, NO_WILD_DIMS, LOCKED;
     private static final ModConfigSpec.BooleanValue ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS;
     private static final ModConfigSpec.ConfigValue<String> DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY;
@@ -65,7 +65,8 @@ public final class ServerConfig {
         b.push("borders");
         FLUIDS = b.comment("Water and lava may flow onto another team's land (from other land or unclaimed land)").define("fluidsAcrossBorders", false);
         FIRE = b.comment("Fire and lightning fire may spread onto another team's land").define("fireAcrossBorders", false);
-        PISTONS = b.comment("Pistons may move blocks across the border of land").define("pistonsAcrossBorders", false);
+        PISTONS = b.comment("Pistons may move blocks across the border of land, falling blocks may land across it").define("pistonsAcrossBorders", false);
+        HOPPERS = b.comment("Hoppers, hopper minecarts, droppers and dispensers may work across the border of land").define("hoppersAcrossBorders", false);
         OWNERLESS = b.comment("Explosions without an owner (redstone TNT, beds, end crystals, cannon shells): own (only on the land where they go off and only with the team switch), never, always")
             .define("ownerlessExplosions", "own", o -> o instanceof String s && Settings.Ownerless.parse(s, null) != null);
         b.pop();
@@ -123,6 +124,7 @@ public final class ServerConfig {
             s.fluidsCross = FLUIDS.get();
             s.fireCross = FIRE.get();
             s.pistonsCross = PISTONS.get();
+            s.hoppersCross = HOPPERS.get();
             s.ownerless = Settings.Ownerless.parse(OWNERLESS.get(), Settings.Ownerless.OWN);
             Rights r = new Rights();
             r.set(Rights.Action.BUILD, preset(DEF_BUILD));
@@ -138,7 +140,7 @@ public final class ServerConfig {
     private static List<ModConfigSpec.ConfigValue<?>> all() {
         return List.of(CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, BONUS_MODE, MAX_LOAD, ALLY_MODE,
             PVP_MODE, DISABLED, ONLY, NO_WILD_DIMS, ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS, DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY,
-            LOG_DAYS, FLUIDS, FIRE, PISTONS, OWNERLESS, LOCKED);
+            LOG_DAYS, FLUIDS, FIRE, PISTONS, HOPPERS, OWNERLESS, LOCKED);
     }
 
     /**
@@ -176,6 +178,7 @@ public final class ServerConfig {
         FLUIDS.set(s.fluidsCross);
         FIRE.set(s.fireCross);
         PISTONS.set(s.pistonsCross);
+        HOPPERS.set(s.hoppersCross);
         OWNERLESS.set(s.ownerless.key());
         DEF_BUILD.set(s.defaultRights.presetOf(Rights.Action.BUILD).key());
         DEF_OPEN.set(s.defaultRights.presetOf(Rights.Action.OPEN).key());

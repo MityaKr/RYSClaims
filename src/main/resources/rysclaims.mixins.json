@@ -5,12 +5,20 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "BlockItemMixin",
+    "ButtonMixin",
+    "DispenserMixin",
+    "DropperMixin",
     "EndermanTakeBlockGoalMixin",
+    "FallingBlockMixin",
     "FireBlockMixin",
     "FlowingFluidMixin",
+    "HopperMixin",
     "LightningBoltMixin",
+    "PressurePlateMixin",
     "ProjectileMixin",
-    "ServerLevelMixin"
+    "SculkMixin",
+    "ServerLevelMixin",
+    "TripWireMixin"
   ],
   "injectors": {
     "defaultRequire": 1

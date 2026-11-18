@@ -123,8 +123,10 @@ public final class Settings {
     public boolean fluidsCross = false;
     /** Огонь и молния переходят на землю другой команды. */
     public boolean fireCross = false;
-    /** Поршни двигают блоки через границу земли. */
+    /** Поршни двигают блоки через границу земли (и падающие блоки ложатся через неё). */
     public boolean pistonsCross = false;
+    /** Воронки, выбрасыватели и раздатчики работают через границу земли. */
+    public boolean hoppersCross = false;
     /** Взрывы без хозяина. */
     public Ownerless ownerless = Ownerless.OWN;
     /** Сколько дней журнал отказов хранит записи. */
