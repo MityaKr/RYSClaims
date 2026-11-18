@@ -58,6 +58,7 @@ public final class Admin {
                     int claims = Integer.parseInt(parts[0].trim()), force = Integer.parseInt(parts[1].trim());
                     if (Math.abs(claims) > 1_000_000 || Math.abs(force) > 1_000_000) return;
                     s.addBonus(team, claims - land.bonusClaims, force - land.bonusForce);
+                    dropRows();
                     ClaimSync.touch(team);
                 } catch (NumberFormatException ignored) {
                     return;
@@ -65,6 +66,7 @@ public final class Admin {
             }
             case "import", "undo" -> {
                 if (!player.hasPermissions(4)) return;
+                dropRows();
                 server.getCommands().performPrefixedCommand(player.createCommandSourceStack(), "claims admin import " + ("import".equals(e.kind()) ? "ftb" : "undo"));
             }
             case "refresh" -> {
@@ -77,9 +79,27 @@ public final class Admin {
         ClaimsNet.send(player, state(s, server, player));
     }
 
+    /** Таблица команд для окна: считается не чаще раза в 2 секунды (перепроверка 18.11, пункт 15), правка лимитов сбрасывает. */
+    private static List<ClaimsNet.TeamRow> rowsCache = List.of();
+    private static long rowsAt;
+
+    static void dropRows() {
+        rowsAt = 0;
+    }
+
     /** Состояние для окна оператора: настройки, команды, режим оператора. */
     static ClaimsNet.AdminState state(ClaimService s, MinecraftServer server, ServerPlayer player) {
         Map<String, String> values = ServerConfig.values();
+        long now = System.currentTimeMillis();
+        if (now - rowsAt > 2000) {
+            rowsCache = rows(s, server);
+            rowsAt = now;
+        }
+        return new ClaimsNet.AdminState(new ArrayList<>(values.keySet()), new ArrayList<>(values.values()), rowsCache, s.bypass(player.getUUID()),
+            s.data().total(), player.hasPermissions(4));
+    }
+
+    private static List<ClaimsNet.TeamRow> rows(ClaimService s, MinecraftServer server) {
         List<ClaimsNet.TeamRow> rows = new ArrayList<>();
         Set<UUID> ids = new LinkedHashSet<>();
         for (Map.Entry<UUID, TeamLand> e : s.data().lands().entrySet()) if (e.getValue().claimed() > 0 || e.getValue().legacyName != null) ids.add(e.getKey());
@@ -114,8 +134,7 @@ public final class Admin {
                 land == null ? 0 : land.bonusForce, dim, x, z));
         }
         rows.sort((a, b) -> Integer.compare(b.claimed(), a.claimed()));
-        return new ClaimsNet.AdminState(new ArrayList<>(values.keySet()), new ArrayList<>(values.values()), rows, s.bypass(player.getUUID()),
-            s.data().total(), player.hasPermissions(4));
+        return rows;
     }
 
     /**

@@ -91,14 +91,30 @@ public final class Borders {
         net.minecraft.nbt.CompoundTag data = cart.getPersistentData();
         java.util.UUID here = s.data().owner(dim, Chunks.pack(cart.getBlockX() >> 4, cart.getBlockZ() >> 4));
         if (!data.contains(HOME)) {
-            data.putString(HOME, here == null ? "" : here.toString());
-            return true;
+            // старая метка строкой (до 0.0.39) переводится в UUID один раз
+            if (data.contains(HOME_OLD)) {
+                String old = data.getString(HOME_OLD);
+                data.remove(HOME_OLD);
+                try {
+                    if (old.isEmpty()) data.putIntArray(HOME, new int[0]);
+                    else data.putUUID(HOME, java.util.UUID.fromString(old));
+                } catch (IllegalArgumentException bad) {
+                    data.putIntArray(HOME, new int[0]);
+                }
+            } else {
+                if (here == null) data.putIntArray(HOME, new int[0]);
+                else data.putUUID(HOME, here);
+                return true;
+            }
         }
         if (here == null) return true;
-        return here.toString().equals(data.getString(HOME));
+        // перепроверка 18.11, пункт 15: сравнение UUID, без строки на каждом тике у каждой вагонетки
+        return data.hasUUID(HOME) && here.equals(data.getUUID(HOME));
     }
 
-    private static final String HOME = "rysclaims:home";
+    /** Команда земли, где вагонетка с воронкой впервые заработала: UUID, пустой массив значит ничья земля. */
+    private static final String HOME = "rysclaims:home_id";
+    private static final String HOME_OLD = "rysclaims:home";
 
     /**
      * Плита, растяжка, кнопка от стрелы на земле команды (строка 7): игрок и снаряд игрока жмут её, только если у игрока

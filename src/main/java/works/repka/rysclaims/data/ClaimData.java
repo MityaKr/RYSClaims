@@ -299,22 +299,6 @@ public final class ClaimData {
         if (c != null) c.plot = 0;
     }
 
-    /** Возвращает участки после отмены слияния: чанки {@code team} с номером из {@code plotMap} получают старый номер. */
-    public void restorePlots(UUID team, UUID from, Map<Integer, Integer> plotMap) {
-        TeamLand dst = teams.get(from), src = landOrCreate(team);
-        if (dst == null) return;
-        for (Map.Entry<Integer, Integer> e : plotMap.entrySet()) {
-            Plot p = dst.plots.remove(e.getKey());
-            if (p != null) src.plots.put(e.getValue(), new Plot(e.getValue(), p.name, p.dim));
-            src.nextPlot = Math.max(src.nextPlot, e.getValue() + 1);
-        }
-        for (Long2ObjectOpenHashMap<Claim> map : dims.values()) {
-            for (Claim c : map.values()) {
-                if (c.team.equals(team) && plotMap.containsKey(c.plot)) c.plot = plotMap.get(c.plot);
-            }
-        }
-    }
-
     /** Пометка «принесён из личной земли» ({@link Claim#brought}). */
     public void brought(String dimension, long chunk, boolean on) {
         Long2ObjectOpenHashMap<Claim> map = dims.get(dimension);
@@ -352,6 +336,7 @@ public final class ClaimData {
         players.clear();
         players.putAll(other.players);
         archive = other.archive.copy();
+        homes.clear();
         homes.putAll(other.homes);
         changes.all();
     }
@@ -362,6 +347,7 @@ public final class ClaimData {
         teams.clear();
         players.clear();
         archive = new ListTag();
+        homes.clear();
         changes.all();
     }
 
