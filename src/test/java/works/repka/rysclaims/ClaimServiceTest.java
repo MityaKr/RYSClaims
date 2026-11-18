@@ -414,4 +414,17 @@ class ClaimServiceTest {
         service.overLimitTick();
         assertEquals(8, service.releasing(TEAM)[0], "через неделю лишнее освобождается с отсчётом");
     }
+
+    /** Сниженный лимит без слияния землю не отнимает (перепроверка 18.11, пункт 3). */
+    @Test
+    void lowerLimitDoesNotRelease() {
+        service.claim(LEADER, TEAM, OW, Chunks.square(0, 0, 1), false); // 9
+        settings.claimsPerTeam = 4;
+        service.overLimitTick();
+        assertEquals(0, data.land(TEAM).overSince, "отсчёт не ставится");
+        now += ClaimService.WEEK_MS * 2;
+        service.overLimitTick();
+        assertEquals(0, service.releasing(TEAM)[0], "через две недели ничего не освобождается");
+        assertEquals(0, service.claim(LEADER, TEAM, OW, one(30, 30), false).done, "но занимать новое нельзя");
+    }
 }

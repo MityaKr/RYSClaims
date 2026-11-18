@@ -187,6 +187,11 @@ public final class ClaimsServer {
         }
 
         @Override
+        public void overLimitReleased(UUID team, int count) {
+            if (count > 0) Feed.post(team, Msg.t("feed.over_limit", "Land over the limit after the merge: %s chunks are being released", count), true);
+        }
+
+        @Override
         public void plotsChanged(UUID team, java.util.List<works.repka.rysclaims.data.Plots.Event> events) {
             ClaimSync.landChanged(team);
             Feed.plots(team, events);

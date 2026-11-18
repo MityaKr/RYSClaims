@@ -191,6 +191,7 @@
   "rysclaims.feed.operator.load": "Operator %s turned force loading on for %s chunks",
   "rysclaims.feed.operator.release": "Operator %s is releasing %s chunks",
   "rysclaims.feed.operator.unload": "Operator %s turned force loading off for %s chunks",
+  "rysclaims.feed.over_limit": "Land over the limit after the merge: %s chunks are being released",
   "rysclaims.feed.release": "%s: releasing %s chunks",
   "rysclaims.feed.split": "Plot split: %s and %s",
   "rysclaims.feed.took": "%s took back own chunks: %s",

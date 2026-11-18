@@ -191,6 +191,7 @@
   "rysclaims.feed.operator.load": "Оператор %s включил прогрузку на %s",
   "rysclaims.feed.operator.release": "Оператор %s освобождает чанков: %s",
   "rysclaims.feed.operator.unload": "Оператор %s выключил прогрузку на %s",
+  "rysclaims.feed.over_limit": "Земля сверх лимита после слияния: освобождается чанков: %s",
   "rysclaims.feed.release": "%s: освобождается чанков %s",
   "rysclaims.feed.split": "Участок разделён: %s и %s",
   "rysclaims.feed.took": "%s забрал свои чанки: %s",

@@ -122,6 +122,9 @@ public final class ClaimService {
 
         /** Игрок занял, освободил, включил или выключил прогрузку на {@code count} чанках своей команды (лента). */
         default void landEdited(UUID actor, UUID team, String op, int count) {}
+
+        /** Неделя сверх лимита после слияния кончилась: лишние чанки пошли на освобождение. */
+        default void overLimitReleased(UUID team, int count) {}
     }
 
     private final ClaimData data;
@@ -887,8 +890,10 @@ public final class ClaimService {
     }
 
     /**
-     * Раз в минуту: земля больше лимита (после слияния) держится 7 дней, потом лишнее освобождается с обычным отсчётом,
-     * сначала самые новые чанки без прогрузки. Архив чистится от записей старше 7 дней.
+     * Раз в минуту: земля больше лимита после слияния держится 7 дней, потом лишнее освобождается с обычным отсчётом,
+     * сначала самые новые чанки без прогрузки, в ленте строка. Отсчёт ставит только {@link #merged} (перепроверка 18.11,
+     * пункт 3): сниженный оператором лимит или ушедший участник землю не отнимают, команда просто не может занимать новое.
+     * Архив чистится от записей старше 7 дней.
      */
     public void overLimitTick() {
         long now = clock.getAsLong();
@@ -904,12 +909,8 @@ public final class ClaimService {
                 }
                 continue;
             }
-            if (land.overSince == 0) {
-                land.overSince = now;
-                hooks.dirty();
-                continue;
-            }
-            if (now - land.overSince < WEEK_MS) continue;
+            if (land.overSince == 0 || now - land.overSince < WEEK_MS) continue;
+            int total = over;
             for (String dim : data.dimensions()) {
                 java.util.List<Claim> mine = new java.util.ArrayList<>();
                 for (Claim c : data.claims(dim).values()) if (c.team().equals(land.id) && !c.releasing()) mine.add(c);
@@ -921,6 +922,7 @@ public final class ClaimService {
                 if (over <= 0) break;
             }
             land.overSince = 0;
+            hooks.overLimitReleased(land.id, total - Math.max(0, over));
             hooks.dirty();
         }
     }
@@ -932,6 +934,8 @@ public final class ClaimService {
         Map<Integer, Integer> plotMap = new HashMap<>();
         var moved = data.transfer(from, into, plotMap);
         merges.put(from, new Merge(into, moved, bc, bf, plotMap));
+        TeamLand dst = data.landOrCreate(into);
+        if (dst.claimed() > limits(into).claims && dst.overSince == 0) dst.overSince = clock.getAsLong();
         after(from, into, moved);
     }
 
