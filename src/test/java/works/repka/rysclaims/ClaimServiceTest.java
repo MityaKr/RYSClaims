@@ -346,6 +346,24 @@ class ClaimServiceTest {
         assertTrue(service.editsRights(null, TEAM, true));
     }
 
+    /** Возврат команды из архива снимает отсчёт распада (перепроверка 18.11, пункт 2), своё освобождение остаётся. */
+    @Test
+    void restoredTeamKeepsLand() {
+        service.claim(LEADER, TEAM, OW, Chunks.square(0, 0, 1), false);
+        service.release(LEADER, TEAM, OW, one(1, 1), false);
+        assertTrue(data.get(OW, Chunks.pack(1, 1)).releasing(), "своё освобождение до распада");
+        service.disbanded(TEAM, "Team");
+        assertTrue(data.get(OW, Chunks.pack(0, 0)).releasing());
+        now += 1000;
+        assertEquals(8, service.restored(TEAM));
+        assertFalse(data.get(OW, Chunks.pack(0, 0)).releasing(), "отсчёт распада снят");
+        assertTrue(data.archive().isEmpty(), "запись архива ушла");
+        assertEquals(0, service.restored(TEAM), "второй раз ничего");
+        now += ClaimService.WEEK_MS;
+        service.tick();
+        assertEquals(TEAM, data.owner(OW, Chunks.pack(0, 0)), "через неделю земля на месте");
+    }
+
     /** З11: вопрос о личной земле, «Оставить себе», «Забрать свои чанки» по полю by, распад на 7 дней, лишнее после слияния. */
     @Test
     void membershipRules() {

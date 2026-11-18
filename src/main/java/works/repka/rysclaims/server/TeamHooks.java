@@ -15,6 +15,9 @@ public final class TeamHooks implements TeamsApi.Listener {
         ClaimSync.landChanged(team);
         ClaimSync.accessChanged();
         if (!ClaimsServer.running()) return;
+        // команда вернулась из архива: земля больше не освобождается
+        int kept = ClaimsServer.service().restored(team);
+        if (kept > 0) works.repka.rysclaims.RYSClaims.LOG.info("RYSClaims: команда {} вернулась из архива, земля оставлена: {} чанков", team, kept);
         // личная земля переходит не сама: игрок отвечает на вопрос (макет 45)
         Membership.joined(team, player);
         ClaimsServer.loaderDirty();

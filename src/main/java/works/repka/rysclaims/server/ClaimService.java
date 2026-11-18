@@ -858,6 +858,35 @@ public final class ClaimService {
     }
 
     /**
+     * Команда вернулась из архива RYSTeams (тот же UUID, событие только {@code onJoined}, перепроверка 18.11, пункт 2):
+     * отсчёт распада снимается с чанков, которым его поставил {@link #disbanded} (срок ровно «распад + 7 дней»), запись
+     * архива уходит. Чанки, которые до распада освобождал сам игрок, продолжают освобождаться. Возвращает, сколько оставлено.
+     */
+    public int restored(UUID team) {
+        long at = -1;
+        for (int i = 0; i < data.archive().size(); i++) {
+            if (data.archive().get(i) instanceof net.minecraft.nbt.CompoundTag t && t.hasUUID("team") && t.getUUID("team").equals(team)) {
+                at = Math.max(at, t.getLong("at"));
+            }
+        }
+        if (at < 0) return 0;
+        long releaseAt = at + WEEK_MS;
+        int n = 0;
+        for (String dim : data.dimensions()) {
+            for (Long2ObjectMap.Entry<Claim> e : data.claims(dim).long2ObjectEntrySet()) {
+                Claim c = e.getValue();
+                if (!c.team().equals(team) || c.releaseAt() != releaseAt) continue;
+                keepOne(dim, e.getLongKey(), c);
+                n++;
+            }
+        }
+        data.archive().removeIf(x -> x instanceof net.minecraft.nbt.CompoundTag t && t.hasUUID("team") && t.getUUID("team").equals(team));
+        hooks.forceChanged(team);
+        hooks.dirty();
+        return n;
+    }
+
+    /**
      * Раз в минуту: земля больше лимита (после слияния) держится 7 дней, потом лишнее освобождается с обычным отсчётом,
      * сначала самые новые чанки без прогрузки. Архив чистится от записей старше 7 дней.
      */
