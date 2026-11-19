@@ -41,7 +41,7 @@ public final class Machines {
     public static boolean blockEntity(Object self, @Nullable Level level, BlockPos target) {
         if (!(self instanceof BlockEntity be) || level == null) return true;
         BlockPos from = be.getLevel() == level ? be.getBlockPos() : null;
-        return at(level, from, null, target, name(be), FAR);
+        return at(level, from, null, target, () -> name(be), FAR);
     }
 
     /** То же, уровень берётся у самой блок-сущности. */
@@ -61,8 +61,9 @@ public final class Machines {
             Field[] f = CONTEXT.get(movementContext.getClass());
             if (!(f[0].get(movementContext) instanceof Level level)) return true;
             Object contraption = f[1].get(movementContext);
-            String name = f[2].get(movementContext) instanceof BlockState st ? BuiltInRegistries.BLOCK.getKey(st.getBlock()).toString() : "create:actor";
-            return contraptionAt(level, contraption, target, name);
+            Object state = f[2].get(movementContext);
+            return contraptionAt(level, contraption, target,
+                () -> state instanceof BlockState st ? BuiltInRegistries.BLOCK.getKey(st.getBlock()).toString() : "create:actor");
         } catch (ReflectiveOperationException | RuntimeException e) {
             return true;
         }
@@ -70,9 +71,14 @@ public final class Machines {
 
     /** Постройка {@code contraption} (её сборка, разборка, работник на ней) трогает блок {@code target}. */
     public static boolean contraptionAt(Level level, @Nullable Object contraption, BlockPos target, String name) {
+        return contraptionAt(level, contraption, target, () -> name);
+    }
+
+    /** То же, имя строится только для журнала. */
+    public static boolean contraptionAt(Level level, @Nullable Object contraption, BlockPos target, java.util.function.Supplier<String> name) {
         BlockPos from = contraption instanceof ContraptionPlace p ? p.rysclaims$place() : null;
         if (from == null) return at(level, null, null, target, name, FAR);
-        return at(level, from, null, target, name + " @" + from.getX() + " " + from.getY() + " " + from.getZ(), FAR);
+        return at(level, from, null, target, () -> name.get() + " @" + from.getX() + " " + from.getY() + " " + from.getZ(), FAR);
     }
 
     /** Поведение блок-сущности Create ({@code BlockEntityBehaviour}): его блок-сущность из поля {@code blockEntity}. */
@@ -182,6 +188,15 @@ public final class Machines {
      * @param reach дальность «рядом» в чанках
      */
     public static boolean at(Level level, @Nullable BlockPos from, @Nullable UUID profile, BlockPos target, String name, int reach) {
+        return at(level, from, profile, target, () -> name, reach);
+    }
+
+    /**
+     * То же; имя машины для журнала строится только при отказе (разбор логики 19.11, раздел 5, пункт 4): эта проверка
+     * зовётся на каждый блок работы машины.
+     */
+    public static boolean at(Level level, @Nullable BlockPos from, @Nullable UUID profile, BlockPos target,
+                             java.util.function.Supplier<String> name, int reach) {
         if (from != null && ((from.getX() ^ target.getX()) >> 4) == 0 && ((from.getZ() ^ target.getZ()) >> 4) == 0) return true;
         ClaimService s = service(level);
         if (s == null) return true;
@@ -195,7 +210,7 @@ public final class Machines {
             fromChunk = Chunks.pack(f.getX() >> 4, f.getZ() >> 4);
         }
         if (s.canMachine(dim, fromChunk, profile, targetChunk, Rights.Action.BUILD, reach)) return true;
-        log(s, dim, targetChunk, profile, name, t);
+        log(s, dim, targetChunk, profile, name.get(), t);
         return false;
     }
 

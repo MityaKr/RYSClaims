@@ -30,8 +30,11 @@ abstract class ForegoingAreaMixin {
     @Inject(method = "isLoaded", at = @At("HEAD"), cancellable = true, require = 0)
     private void rysclaims$loaded(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
         if (!((Object) this instanceof BlockEntity be) || be.getLevel() == null || be.getLevel().isClientSide) return;
-        String name = "industrialforegoing " + be.getBlockPos().getX() + " " + be.getBlockPos().getY() + " " + be.getBlockPos().getZ();
-        if (!Machines.at(be.getLevel(), be.getBlockPos(), rysclaims$owner(be), pos, name, Machines.FAR)) cir.setReturnValue(false);
+        BlockPos from = be.getBlockPos();
+        // тот же чанк: можно всегда, без отражения и строк (разбор логики 19.11, раздел 5, пункт 4)
+        if (((from.getX() ^ pos.getX()) >> 4) == 0 && ((from.getZ() ^ pos.getZ()) >> 4) == 0) return;
+        if (!Machines.at(be.getLevel(), from, rysclaims$owner(be), pos,
+            () -> "industrialforegoing " + from.getX() + " " + from.getY() + " " + from.getZ(), Machines.FAR)) cir.setReturnValue(false);
     }
 
     @Unique
