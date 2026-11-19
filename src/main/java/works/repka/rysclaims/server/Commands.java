@@ -84,6 +84,22 @@ public final class Commands {
             .then(lit("give").executes(c -> answer(c, Membership.JOIN, true)))
             .then(lit("keep").executes(c -> answer(c, Membership.JOIN, false))));
         root.then(lit("take").executes(c -> answer(c, Membership.LEAVE, true)));
+        root.then(lit("plot")
+            .then(lit("give").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.string()).executes(c -> offerPlot(c, 0, -1))))
+            .then(lit("lend").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.string())
+                .then(net.minecraft.commands.Commands.argument("days", IntegerArgumentType.integer(1, ClaimService.MAX_LEASE_DAYS))
+                    .executes(c -> offerPlot(c, IntegerArgumentType.getInteger(c, "days"), -1)))))
+            // из окна «Участки»: участок по номеру, стоять на нём не нужно
+            .then(lit("id").then(net.minecraft.commands.Commands.argument("plot", IntegerArgumentType.integer(1))
+                .then(lit("give").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.string())
+                    .executes(c -> offerPlot(c, 0, IntegerArgumentType.getInteger(c, "plot")))))
+                .then(lit("lend").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.string())
+                    .then(net.minecraft.commands.Commands.argument("days", IntegerArgumentType.integer(1, ClaimService.MAX_LEASE_DAYS))
+                        .executes(c -> offerPlot(c, IntegerArgumentType.getInteger(c, "days"), IntegerArgumentType.getInteger(c, "plot"))))))))
+            .then(lit("accept").executes(c -> plotAnswer(c, true)))
+            .then(lit("decline").executes(c -> plotAnswer(c, false)))
+            .then(lit("return").executes(Commands::returnPlot))
+            .then(lit("leases").executes(Commands::leases)));
         root.then(lit("name").executes(c -> rename(c, ""))
             .then(net.minecraft.commands.Commands.argument("name", StringArgumentType.greedyString())
                 .executes(c -> rename(c, StringArgumentType.getString(c, "name")))));
@@ -286,6 +302,7 @@ public final class Commands {
             case LOCKED -> Msg.t("skip.locked", "locked by the server");
             case NOT_FOUND -> Msg.t("skip.not_found", "not found");
             case BUFFER -> Msg.t("skip.buffer", "too close to another team's land");
+            case LEASED -> Msg.t("skip.leased", "rented: returns to its owner when the lease ends");
         };
     }
 
@@ -360,6 +377,86 @@ public final class Commands {
         Component result = Membership.answer(player, kind, yes);
         c.getSource().sendSuccess(() -> result, false);
         return 1;
+    }
+
+    /**
+     * Участок своей команды (под ногами или по номеру {@code plotId}): передать насовсем ({@code days} 0) или сдать в
+     * аренду.
+     */
+    private static int offerPlot(CommandContext<CommandSourceStack> c, int days, int plotId) throws CommandSyntaxException {
+        ClaimService s = service();
+        CommandSourceStack src = c.getSource();
+        ServerPlayer player = src.getPlayerOrException();
+        UUID from = s.teams().teamOf(player.getUUID());
+        String dim;
+        long chunk;
+        if (plotId > 0) {
+            works.repka.rysclaims.data.Plot byId = s.plot(from, plotId);
+            it.unimi.dsi.fastutil.longs.LongList ch = byId == null ? it.unimi.dsi.fastutil.longs.LongList.of() : s.plotChunks(from, plotId);
+            if (ch.isEmpty()) return fail(src, Msg.t("plot.not_found", "No such plot in your team"));
+            dim = byId.dim;
+            chunk = ch.getLong(0);
+        } else {
+            dim = Loader.id(src.getLevel().dimension());
+            chunk = Chunks.pack(net.minecraft.util.Mth.floor(src.getPosition().x) >> 4, net.minecraft.util.Mth.floor(src.getPosition().z) >> 4);
+        }
+        Claim claim = s.data().get(dim, chunk);
+        if (claim == null || !claim.team().equals(from)) throw new SimpleCommandExceptionType(Msg.t("error.not_own_plot", "Stand on your team's land")).create();
+        if (!s.manages(player.getUUID(), from, ClaimService.PERM_CLAIM)) return fail(src, Msg.t("error.no_right", "Your role in the team cannot do this"));
+        if (s.leaseOf(from, dim, chunk) != null) return fail(src, Msg.t("plot.rented", "This plot is rented: it returns to its owner when the lease ends"));
+        UUID to = team(c);
+        if (to.equals(from)) return fail(src, Msg.t("plot.self", "This is your own team"));
+        works.repka.rysclaims.data.Plot p = s.plot(from, claim.plot());
+        it.unimi.dsi.fastutil.longs.LongList chunks = p == null ? it.unimi.dsi.fastutil.longs.LongList.of(chunk) : s.plotChunks(from, p.id);
+        String name = p == null ? "" : plotName(p).getString();
+        PlotDeals.offer(s, player, from, to, dim, chunks, name, days);
+        src.sendSuccess(() -> Msg.t("plot.offered", "Offer sent to %s: plot %s, %s chunks", teamName(s, to), name, chunks.size()), false);
+        return 1;
+    }
+
+    private static int plotAnswer(CommandContext<CommandSourceStack> c, boolean yes) throws CommandSyntaxException {
+        service();
+        Component result = PlotDeals.answer(c.getSource().getPlayerOrException(), yes);
+        c.getSource().sendSuccess(() -> result, false);
+        return 1;
+    }
+
+    /** Арендатор возвращает участок под ногами раньше срока. */
+    private static int returnPlot(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        ClaimService s = service();
+        CommandSourceStack src = c.getSource();
+        ServerPlayer player = src.getPlayerOrException();
+        String dim = Loader.id(src.getLevel().dimension());
+        long chunk = Chunks.pack(net.minecraft.util.Mth.floor(src.getPosition().x) >> 4, net.minecraft.util.Mth.floor(src.getPosition().z) >> 4);
+        UUID team = s.teams().teamOf(player.getUUID());
+        if (!s.manages(player.getUUID(), team, ClaimService.PERM_CLAIM)) return fail(src, Msg.t("error.no_right", "Your role in the team cannot do this"));
+        int n = s.endLease(team, dim, chunk);
+        if (n < 0) return fail(src, Msg.t("plot.not_rented", "Stand on a plot your team rents"));
+        src.sendSuccess(() -> Msg.t("plot.returned", "Plot returned to its owner: %s chunks", n), false);
+        return 1;
+    }
+
+    /** Аренды команды: что сдано и что снято, сколько дней осталось. */
+    private static int leases(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        ClaimService s = service();
+        CommandSourceStack src = c.getSource();
+        UUID team = s.teams().teamOf(src.getPlayerOrException().getUUID());
+        var list = s.leases(team);
+        if (list.isEmpty()) {
+            src.sendSuccess(() -> Msg.t("plot.leases.none", "No leases"), false);
+            return 0;
+        }
+        long now = System.currentTimeMillis();
+        for (var l : list) {
+            boolean mine = l.getUUID("owner").equals(team);
+            Component other = teamName(s, mine ? l.getUUID("tenant") : l.getUUID("owner"));
+            long days = Math.max(0, (l.getLong("until") - now + 86_399_999L) / 86_400_000L);
+            int n = l.getLongArray("chunks").length;
+            String name = l.getString("name");
+            src.sendSuccess(() -> mine ? Msg.t("plot.leases.out", "  %s → %s: %s chunks, %s days left", name, other, n, days)
+                : Msg.t("plot.leases.in", "  %s ← %s: %s chunks, %s days left", name, other, n, days), false);
+        }
+        return list.size();
     }
 
     /** Имя участка; пустое это «Участок N». */

@@ -57,6 +57,10 @@ public final class DenyFeedback {
      * свои чанки?». Ответ уходит пакетом {@code Answer}; без ответа земля остаётся личной, вопрос придёт при следующем входе.
      */
     public static void question(works.repka.rysclaims.net.ClaimsNet.Question q) {
+        if (q.kind() == 2 || q.kind() == 3) {
+            plotQuestion(q);
+            return;
+        }
         boolean join = q.kind() == 0;
         String title = join ? Words.t("question.join.title", Words.chunks(q.count())) : Words.t("question.leave.title", Words.chunks(q.count()));
         String note = join ? Words.t(q.fits() ? "question.join.note" : "question.join.no_room", q.team()) : Words.t("question.leave.note", q.team());
@@ -69,6 +73,17 @@ public final class DenyFeedback {
             n.button(Words.t("question.leave.no"), false, () -> {});
             n.button(Words.t("question.leave.take"), true, () -> LandCache.send(new works.repka.rysclaims.net.ClaimsNet.Answer(1, true)));
         }
+        Notices.show(n);
+    }
+
+    /** Предложение участка (передача или аренда): «Принять» и «Отказаться», без места у команды только «Отказаться». */
+    private static void plotQuestion(works.repka.rysclaims.net.ClaimsNet.Question q) {
+        boolean lend = q.kind() == 3;
+        String title = lend ? Words.t("question.lend.title", q.team(), q.days()) : Words.t("question.give.title", q.team());
+        String note = Words.t(q.fits() ? "question.plot.note" : "question.plot.no_room", q.plot(), Words.chunks(q.count()));
+        Notice n = Notice.buttons(Notice.CLAIMS, "question_plot").icon(Icons.Shape.SHIELD).title(title).note(note).millis(120_000);
+        n.button(Words.t("question.plot.no"), false, () -> LandCache.send(new works.repka.rysclaims.net.ClaimsNet.Answer(q.kind(), false)));
+        if (q.fits()) n.button(Words.t("question.plot.yes"), true, () -> LandCache.send(new works.repka.rysclaims.net.ClaimsNet.Answer(q.kind(), true)));
         Notices.show(n);
     }
 

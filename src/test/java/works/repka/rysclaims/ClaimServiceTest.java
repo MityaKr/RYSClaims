@@ -464,6 +464,33 @@ class ClaimServiceTest {
         settings.idleUnclaimDays = 0;
     }
 
+    /** Передача и аренда участка: лимит получателя, аренда возвращается по сроку, арендатор не освобождает. */
+    @Test
+    void plotHandOverAndLease() {
+        long day = 86_400_000L;
+        service.claim(LEADER, TEAM, OW, Chunks.square(0, 0, 1), false);
+        LongList plot = service.plotChunks(TEAM, data.get(OW, Chunks.pack(0, 0)).plot());
+        assertEquals(9, plot.size());
+        settings.claimsPerTeam = 5;
+        assertEquals(-1, service.handOver(TEAM, OTHER, OW, plot, 0, "Ферма"), "у получателя нет места");
+        assertEquals(TEAM, data.owner(OW, Chunks.pack(0, 0)));
+        settings.claimsPerTeam = 500;
+        assertEquals(9, service.handOver(TEAM, OTHER, OW, plot, now + 3 * day, "Ферма"));
+        assertEquals(OTHER, data.owner(OW, Chunks.pack(0, 0)));
+        assertEquals("Ферма", service.plot(OTHER, data.get(OW, Chunks.pack(0, 0)).plot()).name, "имя участка у арендатора");
+        assertEquals(0, service.release(ALLY, OTHER, OW, one(0, 0), false).done, "арендатор не освобождает");
+        assertEquals(1, service.leases(TEAM).size());
+        assertTrue(ClaimData.load(data.save(), settings.defaultRights).leases().size() == 1, "аренда переживает перезапуск");
+        assertEquals(0, service.handOver(OTHER, STRANGER, OW, plot, 0, ""), "арендатор дальше не передаёт");
+        now += 3 * day + 1;
+        service.leaseTick();
+        assertEquals(TEAM, data.owner(OW, Chunks.pack(0, 0)), "по сроку участок вернулся");
+        assertTrue(service.leases(TEAM).isEmpty());
+        // насовсем
+        assertEquals(9, service.handOver(TEAM, OTHER, OW, plot, 0, ""));
+        assertEquals(1, service.release(ALLY, OTHER, OW, one(0, 0), false).done, "своё теперь можно освобождать");
+    }
+
     /** Буфер: чужая команда не занимает ближе N чанков, оператор может, своя земля буфера не держит. */
     @Test
     void bufferKeepsStrangersAway() {

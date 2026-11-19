@@ -71,6 +71,7 @@ public final class ClaimsServer {
         Alerts.clear();
         Feed.clear();
         Membership.clear();
+        PlotDeals.clear();
         server = null;
         saved = null;
         service = null;
@@ -125,6 +126,7 @@ public final class ClaimsServer {
             for (ServerPlayer p : srv.getPlayerList().getPlayers()) online.add(s.teams().teamOf(p.getUUID()));
             for (java.util.UUID t : online) s.seen(t);
             s.idleTick();
+            s.leaseTick();
         }
         if (loaderDirty || ticks % 200 == 0) {
             loaderDirty = false;
@@ -215,6 +217,15 @@ public final class ClaimsServer {
         @Override
         public void landEdited(UUID actor, UUID team, String op, int count) {
             Feed.edited(actor, team, op, count);
+        }
+
+        @Override
+        public void plotMoved(UUID from, UUID to, String name, int count, int days) {
+            if (service != null) PlotDeals.feed(service, from, to, name, count, days);
+            ClaimSync.landChanged(from);
+            ClaimSync.landChanged(to);
+            ClaimSync.accessChanged();
+            ClaimsServer.loaderDirty();
         }
 
         @Override

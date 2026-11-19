@@ -413,11 +413,12 @@ public final class ClaimsNet {
      * Вопрос игроку уведомлением с двумя кнопками: {@code kind} 0 «Отдать личную землю команде?» при вступлении (макет 45),
      * 1 «Забрать свои чанки?» при уходе; сколько чанков, хватает ли лимита, имя команды.
      */
-    public record Question(int kind, int count, boolean fits, String team) implements CustomPacketPayload {
+    public record Question(int kind, int count, boolean fits, String team, String plot, int days) implements CustomPacketPayload {
         public static final Type<Question> TYPE = new Type<>(ClaimsNet.id("question"));
         public static final StreamCodec<ByteBuf, Question> CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_INT, Question::kind, ByteBufCodecs.VAR_INT, Question::count, ByteBufCodecs.BOOL, Question::fits,
-            ByteBufCodecs.stringUtf8(64), Question::team, Question::new);
+            ByteBufCodecs.stringUtf8(64), Question::team, ByteBufCodecs.stringUtf8(64), Question::plot, ByteBufCodecs.VAR_INT, Question::days,
+            Question::new);
 
         @Override
         public Type<? extends CustomPacketPayload> type() {

@@ -31,6 +31,7 @@ import org.jetbrains.annotations.Nullable;
  * claims: { измерение: [ { pos, team, by?, brought?, at, plot, force, releaseAt } ] }
  * players: { uuid: { bonusClaims, bonusForce } }
  * archive: [ … ]                     распавшиеся команды (0.2), хранится как есть
+ * leases: [ { owner, tenant, dim, chunks, until, name } ]   участки в аренде (0.0.42)
  * </pre>
  */
 public final class ClaimData {
@@ -40,6 +41,8 @@ public final class ClaimData {
     private final Map<UUID, TeamLand> teams = new LinkedHashMap<>();
     private final Map<UUID, PlayerBonus> players = new LinkedHashMap<>();
     private ListTag archive = new ListTag();
+    /** Участки в аренде: хозяин, арендатор, измерение, чанки, срок, имя участка. */
+    private ListTag leases = new ListTag();
     /** «Дом» летающей постройки Sable: UUID подуровня → команда земли, где её собрали (план, раздел 11, строка 34). */
     private final Map<UUID, UUID> homes = new LinkedHashMap<>();
     private Rights defaults;
@@ -336,6 +339,7 @@ public final class ClaimData {
         players.clear();
         players.putAll(other.players);
         archive = other.archive.copy();
+        leases = other.leases.copy();
         homes.clear();
         homes.putAll(other.homes);
         changes.all();
@@ -347,6 +351,7 @@ public final class ClaimData {
         teams.clear();
         players.clear();
         archive = new ListTag();
+        leases = new ListTag();
         homes.clear();
         changes.all();
     }
@@ -358,6 +363,11 @@ public final class ClaimData {
 
     public ListTag archive() {
         return archive;
+    }
+
+    /** Участки в аренде (записи как есть, правит сервис). */
+    public ListTag leases() {
+        return leases;
     }
 
     /** Убирает из архива записи старше {@code border} (мс от эпохи). */
@@ -416,6 +426,7 @@ public final class ClaimData {
         }
         tag.put("players", p);
         tag.put("archive", archive.copy());
+        if (!leases.isEmpty()) tag.put("leases", leases.copy());
         if (!homes.isEmpty()) {
             ListTag h = new ListTag();
             homes.forEach((sub, team) -> {
@@ -467,6 +478,7 @@ public final class ClaimData {
             data.players.put(id, pb);
         }
         data.archive = tag.getList("archive", Tag.TAG_COMPOUND).copy();
+        data.leases = tag.getList("leases", Tag.TAG_COMPOUND).copy();
         for (Tag x : tag.getList("homes", Tag.TAG_COMPOUND)) {
             CompoundTag t = (CompoundTag) x;
             if (t.hasUUID("sub") && t.hasUUID("team")) data.homes.put(t.getUUID("sub"), t.getUUID("team"));

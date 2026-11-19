@@ -69,7 +69,9 @@ public final class ClaimService {
         /** Игрок или участок не найден. */
         NOT_FOUND,
         /** Ближе буфера к земле чужой команды (настройка {@code bufferChunks}). */
-        BUFFER
+        BUFFER,
+        /** Чанк в аренде у этой команды: освобождать нельзя, по сроку он вернётся хозяину. */
+        LEASED
     }
 
     /** Итог действия: сколько сделано, сколько пропущено и почему. */
@@ -127,6 +129,9 @@ public final class ClaimService {
 
         /** Неделя сверх лимита после слияния кончилась: лишние чанки пошли на освобождение. */
         default void overLimitReleased(UUID team, int count) {}
+
+        /** Участок перешёл к другой команде: насовсем ({@code days} 0), в аренду на {@code days} дней или вернулся из аренды (-1). */
+        default void plotMoved(UUID from, UUID to, String name, int count, int days) {}
 
         /** Простой команды: {@code kind} warn (неделя до снятия земли), unforce (прогрузка снята), unclaim (земля освобождается). */
         default void idle(UUID team, String kind, int count, int days) {}
@@ -384,6 +389,8 @@ public final class ClaimService {
             if (c == null) r.skip(Skip.NOT_CLAIMED);
             else if (!c.team().equals(team)) r.skip(Skip.NOT_OWNER);
             else if (c.releasing()) r.skip(Skip.ALREADY);
+            // арендатор чужой участок не освобождает: он вернётся хозяину по сроку
+            else if (!admin && leaseOf(team, dim, chunk) != null) r.skip(Skip.LEASED);
             else {
                 r.done++;
                 r.changed.add(chunk);
@@ -971,6 +978,113 @@ public final class ClaimService {
             hooks.overLimitReleased(land.id, total - Math.max(0, over));
             hooks.dirty();
         }
+    }
+
+    // ---- передача и аренда участка (план, раздел 6 «Потом») ----
+
+    /** Самый долгий срок аренды в днях. */
+    public static final int MAX_LEASE_DAYS = 365;
+
+    /**
+     * Передаёт чанки {@code chunks} команды {@code from} команде {@code to}: насовсем ({@code until} 0) или в аренду до
+     * {@code until}. Берутся только чанки, которые ещё у {@code from} и не освобождаются; уже арендованные {@code from}
+     * чужие чанки дальше не передаются. У получателя должно хватать лимита (иначе -1, ничего не меняется). Участок у
+     * получателя получает имя {@code name}. Возвращает, сколько передано.
+     */
+    public int handOver(UUID from, UUID to, String dim, LongList chunks, long until, String name) {
+        if (from.equals(to)) return 0;
+        LongList take = new LongArrayList();
+        for (long chunk : chunks) {
+            Claim c = data.get(dim, chunk);
+            if (c != null && c.team().equals(from) && !c.releasing() && leaseOf(from, dim, chunk) == null) take.add(chunk);
+        }
+        if (take.isEmpty()) return 0;
+        if (data.claimed(to) + take.size() > limits(to).claims) return -1;
+        for (long chunk : take) {
+            data.reassign(dim, chunk, to);
+            data.clearPlot(dim, chunk);
+            data.brought(dim, chunk, false);
+        }
+        if (until > 0) {
+            net.minecraft.nbt.CompoundTag l = new net.minecraft.nbt.CompoundTag();
+            l.putUUID("owner", from);
+            l.putUUID("tenant", to);
+            l.putString("dim", dim);
+            l.putLongArray("chunks", take.toLongArray());
+            l.putLong("until", until);
+            l.putString("name", name);
+            data.leases().add(l);
+        }
+        data.edited();
+        after(from, to, Map.of(dim, take));
+        Claim first = data.get(dim, take.getLong(0));
+        if (first != null && !name.isEmpty()) {
+            Plot p = plot(to, first.plot());
+            if (p != null && p.name.isEmpty()) renamePlot(null, to, p.id, name, true);
+        }
+        long days = until <= 0 ? 0 : Math.max(1, (until - clock.getAsLong() + 86_399_999L) / 86_400_000L);
+        hooks.plotMoved(from, to, name, take.size(), (int) days);
+        return take.size();
+    }
+
+    /** Запись аренды, в которой чанк сдан команде {@code tenant}, или null. */
+    public net.minecraft.nbt.@Nullable CompoundTag leaseOf(UUID tenant, String dim, long chunk) {
+        for (int i = 0; i < data.leases().size(); i++) {
+            if (!(data.leases().get(i) instanceof net.minecraft.nbt.CompoundTag l)) continue;
+            if (!l.hasUUID("tenant") || !l.getUUID("tenant").equals(tenant) || !dim.equals(l.getString("dim"))) continue;
+            for (long c : l.getLongArray("chunks")) if (c == chunk) return l;
+        }
+        return null;
+    }
+
+    /** Аренды, где команда хозяин или арендатор. */
+    public java.util.List<net.minecraft.nbt.CompoundTag> leases(UUID team) {
+        java.util.List<net.minecraft.nbt.CompoundTag> out = new java.util.ArrayList<>();
+        for (int i = 0; i < data.leases().size(); i++) {
+            if (data.leases().get(i) instanceof net.minecraft.nbt.CompoundTag l && l.hasUUID("owner") && l.hasUUID("tenant")
+                && (l.getUUID("owner").equals(team) || l.getUUID("tenant").equals(team))) out.add(l);
+        }
+        return out;
+    }
+
+    /** Арендатор возвращает участок раньше срока (стоит на нём). Возвращает, сколько чанков вернулось, или -1 (не аренда). */
+    public int endLease(UUID tenant, String dim, long chunk) {
+        net.minecraft.nbt.CompoundTag l = leaseOf(tenant, dim, chunk);
+        if (l == null) return -1;
+        return finishLease(l);
+    }
+
+    /** Раз в минуту: аренды со сроком в прошлом возвращают хозяину чанки, которые всё ещё у арендатора. */
+    public void leaseTick() {
+        long now = clock.getAsLong();
+        for (int i = data.leases().size() - 1; i >= 0; i--) {
+            if (data.leases().get(i) instanceof net.minecraft.nbt.CompoundTag l && l.getLong("until") <= now) finishLease(l);
+        }
+    }
+
+    private int finishLease(net.minecraft.nbt.CompoundTag l) {
+        data.leases().remove(l);
+        if (!l.hasUUID("owner") || !l.hasUUID("tenant")) return 0;
+        UUID owner = l.getUUID("owner"), tenant = l.getUUID("tenant");
+        String dim = l.getString("dim");
+        LongList back = new LongArrayList();
+        for (long chunk : l.getLongArray("chunks")) {
+            Claim c = data.get(dim, chunk);
+            if (c == null || !c.team().equals(tenant)) continue;
+            data.reassign(dim, chunk, owner);
+            data.clearPlot(dim, chunk);
+            // отсчёт освобождения (если был) снимается: чанк снова хозяина
+            Claim now = data.get(dim, chunk);
+            if (now != null && now.releasing()) keepOne(dim, chunk, now);
+            back.add(chunk);
+        }
+        data.edited();
+        hooks.dirty();
+        if (!back.isEmpty()) {
+            after(tenant, owner, Map.of(dim, back));
+            hooks.plotMoved(tenant, owner, l.getString("name"), back.size(), -1);
+        }
+        return back.size();
     }
 
     /** Сколько дней до снятия земли по простою уходит предупреждение. */

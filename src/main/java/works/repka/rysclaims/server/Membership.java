@@ -47,7 +47,7 @@ public final class Membership {
         UUID team = s.teams().teamOf(player);
         int n = s.data().claimed(player);
         boolean fits = s.data().claimed(team) + n <= s.limits(team).claims;
-        if (ClaimsNet.accepts(p)) ClaimsNet.send(p, new ClaimsNet.Question(JOIN, n, fits, Commands.teamName(s, team).getString()));
+        if (ClaimsNet.accepts(p)) ClaimsNet.send(p, new ClaimsNet.Question(JOIN, n, fits, Commands.teamName(s, team).getString(), "", 0));
         else p.sendSystemMessage(Msg.t("personal.ask", "You have personal land: %s chunks. /claims personal give gives it to the team, /claims personal keep keeps it", n));
     }
 
@@ -96,7 +96,7 @@ public final class Membership {
         MinecraftServer server = ClaimsServer.server();
         ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(player);
         if (p == null) return;
-        if (ClaimsNet.accepts(p)) ClaimsNet.send(p, new ClaimsNet.Question(LEAVE, n, true, Commands.teamName(s, team).getString()));
+        if (ClaimsNet.accepts(p)) ClaimsNet.send(p, new ClaimsNet.Question(LEAVE, n, true, Commands.teamName(s, team).getString(), "", 0));
         else p.sendSystemMessage(Msg.t("take.ask", "You brought %s chunks to the team. /claims take takes them back within an hour", n));
     }
 
@@ -132,7 +132,12 @@ public final class Membership {
     }
 
     public static void onAnswer(ServerPlayer player, ClaimsNet.Answer a) {
-        if (!ClaimsServer.running() || (a.kind() != JOIN && a.kind() != LEAVE)) return;
+        if (!ClaimsServer.running()) return;
+        if (a.kind() == PlotDeals.GIVE || a.kind() == PlotDeals.LEND) {
+            player.sendSystemMessage(PlotDeals.answer(player, a.yes()));
+            return;
+        }
+        if (a.kind() != JOIN && a.kind() != LEAVE) return;
         player.sendSystemMessage(answer(player.getUUID(), a.kind(), a.yes()));
     }
 
