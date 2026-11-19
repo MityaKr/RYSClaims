@@ -188,6 +188,9 @@ public final class Commands {
             .then(lit("force").then(net.minecraft.commands.Commands.argument("n", IntegerArgumentType.integer(-1_000_000, 1_000_000))
                 .executes(c -> playerBonus(c, false))))));
         node.then(lit("loaded").executes(Commands::loaded));
+        node.then(lit("server").executes(c -> serverLand(c, "Сервер"))
+            .then(net.minecraft.commands.Commands.argument("name", StringArgumentType.greedyString())
+                .executes(c -> serverLand(c, StringArgumentType.getString(c, "name")))));
         node.then(lit("import").requires(s -> s.hasPermission(4))
             .then(lit("ftb").executes(c -> imported(c, false)))
             .then(lit("undo").executes(c -> imported(c, true))));
@@ -219,6 +222,23 @@ public final class Commands {
         });
         if (found == null) throw NO_TEAM.create();
         return found;
+    }
+
+    /**
+     * Земля сервера (разбор скептика 18.11, раздел 2.7: спавн, места сервера): своя запись без команды RYSTeams, как
+     * земля FTB без пары. Своих в ней нет, строит оператор в режиме оператора, занимает {@code /claims admin for <имя>
+     * claim}; простой её не снимает, лимита нет. Повтор только переименовывает.
+     */
+    private static int serverLand(CommandContext<CommandSourceStack> c, String name) throws CommandSyntaxException {
+        ClaimService s = service();
+        TeamLand land = s.data().landOrCreate(ClaimService.SERVER_LAND);
+        land.legacyName = name.isBlank() ? "Сервер" : name.strip();
+        land.legacySource = "server";
+        ClaimsServer.markDirty();
+        ClaimSync.resendAll();
+        String shown = land.legacyName;
+        c.getSource().sendSuccess(() -> Msg.t("server_land.ready", "Server land %s is ready: /claims admin for \"%s\" claim <radius>", shown, shown), true);
+        return 1;
     }
 
     /** Имена команд RYSTeams и команд FTB без пары. */

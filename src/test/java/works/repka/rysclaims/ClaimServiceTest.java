@@ -466,6 +466,26 @@ class ClaimServiceTest {
         settings.idleUnclaimDays = 0;
     }
 
+    /** Земля сервера: занимает оператор без лимита, чужие и любая команда не строят, простой её не снимает. */
+    @Test
+    void serverLand() {
+        TeamLand land = data.landOrCreate(ClaimService.SERVER_LAND);
+        land.legacyName = "Сервер";
+        land.legacySource = "server";
+        settings.claimsPerTeam = 1;
+        assertEquals(9, service.claim(null, ClaimService.SERVER_LAND, OW, Chunks.square(50, 50, 1), true).done, "оператор без лимита");
+        assertFalse(service.can(LEADER, OW, Chunks.pack(50, 50), Rights.Action.BUILD));
+        assertFalse(service.can(STRANGER, OW, Chunks.pack(50, 50), Rights.Action.OPEN));
+        assertEquals(0, service.claim(LEADER, ClaimService.SERVER_LAND, OW, one(60, 60), false).done, "игрок не занимает для сервера");
+        settings.idleUnclaimDays = 1;
+        now += 10L * 86_400_000L;
+        service.idleTick();
+        service.idleTick();
+        assertEquals(0, service.releasing(ClaimService.SERVER_LAND)[0], "простой не снимает");
+        settings.idleUnclaimDays = 0;
+        settings.claimsPerTeam = 500;
+    }
+
     /** Свои права участка: открытый участок у закрытой команды, разрез сохраняет права, файл тоже. */
     @Test
     void plotOwnRights() {

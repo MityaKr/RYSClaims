@@ -113,7 +113,7 @@ public final class Admin {
             Limits lim = s.limits(team);
             boolean online = false;
             for (UUID m : s.teams().members(team)) if (server.getPlayerList().getPlayer(m) != null) online = true;
-            String note = land != null && "ftb-server".equals(land.legacySource) ? "server" : land != null && land.legacyName != null ? "ftb" : "";
+            String note = land != null && ("ftb-server".equals(land.legacySource) || "server".equals(land.legacySource)) ? "server" : land != null && land.legacyName != null ? "ftb" : "";
             int members = land != null && land.legacyName != null ? land.legacyMembers.size() : s.teams().members(team).size();
             // «На карте»: середина самого большого участка
             String dim = "";

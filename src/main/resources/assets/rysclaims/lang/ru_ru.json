@@ -518,6 +518,7 @@
   "rysclaims.screen.title": "Земля",
   "rysclaims.screen.to_me": "Ко мне",
   "rysclaims.screen.waiting": "Сервер ещё не прислал землю. Подожди пару секунд.",
+  "rysclaims.server_land.ready": "Земля сервера «%s» готова: /claims admin for \"%s\" claim <радиус>",
   "rysclaims.set.custom": "Свои",
   "rysclaims.set.open": "Открытая база",
   "rysclaims.set.solo.open": "Открытая база",

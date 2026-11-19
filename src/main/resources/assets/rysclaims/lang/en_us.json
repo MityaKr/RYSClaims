@@ -518,6 +518,7 @@
   "rysclaims.screen.title": "Land",
   "rysclaims.screen.to_me": "To me",
   "rysclaims.screen.waiting": "The server has not sent the land yet. Give it a couple of seconds.",
+  "rysclaims.server_land.ready": "Server land %s is ready: /claims admin for \"%s\" claim <radius>",
   "rysclaims.set.custom": "Custom",
   "rysclaims.set.open": "Open base",
   "rysclaims.set.solo.open": "Open base",

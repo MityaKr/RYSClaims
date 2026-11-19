@@ -1008,6 +1008,9 @@ public final class ClaimService {
 
     // ---- передача и аренда участка (план, раздел 6 «Потом») ----
 
+    /** Земля сервера ({@code /claims admin server}): постоянный UUID без команды RYSTeams. */
+    public static final UUID SERVER_LAND = UUID.nameUUIDFromBytes("rysclaims:server-land".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
     /** Самый долгий срок аренды в днях. */
     public static final int MAX_LEASE_DAYS = 365;
 
