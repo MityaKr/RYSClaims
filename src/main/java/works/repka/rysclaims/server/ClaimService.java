@@ -1175,13 +1175,19 @@ public final class ClaimService {
         }
     }
 
-    /** Участник команды вошёл или в сети: простой сначала. */
+    /**
+     * Участник команды вошёл или в сети: простой сначала. Файл не помечается (разбор логики 19.11, раздел 5, пункт 6):
+     * время входа пишется на диск раз в час, при выходе игрока и при остановке сервера ({@code ClaimsServer}); снятое
+     * предупреждение о простое пишется сразу.
+     */
     public void seen(UUID team) {
         TeamLand land = data.land(team);
         if (land == null) return;
         land.lastSeen = clock.getAsLong();
-        if (land.idleWarned) land.idleWarned = false;
-        hooks.dirty();
+        if (land.idleWarned) {
+            land.idleWarned = false;
+            hooks.dirty();
+        }
     }
 
     /** Слияние: вся земля и добавка уходящей команды переходит принимающей. Отмена в течение 30 секунд возвращает. */

@@ -77,7 +77,10 @@ public final class RYSClaims {
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent e) -> {
             if (e.getEntity() instanceof ServerPlayer p && !(p instanceof FakePlayer)) ClaimsServer.login(p);
         });
+        // сохранение мира при остановке идёт раньше ServerStoppedEvent: время входа команд помечаем к записи здесь
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppingEvent e) -> ClaimsServer.markDirty());
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent e) -> {
+            if (e.getEntity() instanceof ServerPlayer p && !(p instanceof FakePlayer)) ClaimsServer.logout(p);
             ClaimsServer.loaderDirty();
             works.repka.rysclaims.server.ClaimSync.logout(e.getEntity().getUUID());
         });

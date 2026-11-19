@@ -119,6 +119,8 @@ public final class ClaimsServer {
             if (ticks % LOG_PRUNE_TICKS == 0) l.prune(s.settings().logDays);
         }
         if (ticks % 200 == 0) Feed.flush(srv);
+        // время входа команд (lastSeen) на диск раз в час
+        if (ticks % 72_000 == 0) markDirty();
         if (ticks % 1200 == 600) {
             s.overLimitTick();
             // кто в сети, у того простоя нет
@@ -152,6 +154,14 @@ public final class ClaimsServer {
     /** Прогрузка пересчитается на следующем тике (игрок вышел: к тому времени его уже нет в списке). */
     public static void loaderDirty() {
         loaderDirty = true;
+    }
+
+    /** Игрок вышел: последний вход его команды это сейчас, на диск при ближайшем сохранении. */
+    public static void logout(ServerPlayer player) {
+        ClaimService s = service;
+        if (s == null) return;
+        s.seen(s.teams().teamOf(player.getUUID()));
+        markDirty();
     }
 
     public static void login(ServerPlayer player) {
