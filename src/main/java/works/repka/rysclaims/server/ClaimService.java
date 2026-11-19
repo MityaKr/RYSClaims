@@ -769,6 +769,32 @@ public final class ClaimService {
         return flag(owner, TeamLand.Flag.MACHINES_OUTSIDE);
     }
 
+    /**
+     * Фейковый игрок из события (разбор фейков 20.11): одно решение для установки, разрушения и нажатий машин.
+     * <ol>
+     *   <li>свободная земля: открытая всем, закрытая только хозяину фейка с правом;</li>
+     *   <li>имя фейка в списке команды земли ({@code machineNames}): можно;</li>
+     *   <li>хозяин фейка ({@link works.repka.rysclaims.data.FakeProfiles#owner}: не общий профиль мода) с правом на этой земле
+     *       («Машины с профилем»): можно, свой и доверенный участок открыт, чужой нет;</li>
+     *   <li>место машины известно (тикающая блок-сущность): на земле той же команды решает «Машины на земле команды», на
+     *       любом расстоянии (месту блок-сущности верим);</li>
+     *   <li>иначе, в том числе машина через границу с чужой или свободной земли, решает «Машины снаружи».</li>
+     * </ol>
+     *
+     * @param from  чанк машины или {@code Long.MIN_VALUE}, если место неизвестно
+     * @param owner хозяин фейка или null (общий профиль мода)
+     * @param name  имя профиля фейка
+     */
+    public boolean canFake(String dim, long from, @Nullable UUID owner, String name, long target, Rights.Action action) {
+        Settings s = settings.get();
+        if (!s.protection) return true;
+        UUID land = data.owner(dim, target);
+        if (land == null) return !s.wildernessClosed(dim) || owner != null && can(owner, dim, target, action);
+        TeamLand t = data.land(land);
+        if (t != null && t.machineNames.contains(name)) return true;
+        return canMachine(dim, from, owner, target, action, Integer.MAX_VALUE);
+    }
+
     /** Почему отказано: строка у прицела и в журнале (план, раздел 11, «Что видит игрок при отказе»). */
     public enum Reason {
         BUILD, OPEN, USE, ENTITY, FLUID, PVP,

@@ -113,6 +113,44 @@ public final class MachinesGameTests {
         done(h);
     }
 
+    /**
+     * Фейк с общим профилем (Actually Additions, {@code [Minecraft]}) внутри тика блок-сущности (разбор фейков 20.11): своя
+     * земля открыта, чужая через границу нет, без тика место неизвестно. Тик здесь ставится руками, перехват тика тот же
+     * {@link Machines#ticking(BlockEntity)}.
+     */
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void sharedFakeUsesTickingMachine(GameTestHelper h) {
+        ServerLevel level = h.getLevel();
+        BlockPos machine = base(9).offset(8, 1, 8);
+        BlockPos ownNext = machine.offset(16, 0, 0), foreign = machine.offset(32, 0, 0);
+        UUID team = UUID.randomUUID(), other = UUID.randomUUID();
+        claim(level, team, machine, ownNext);
+        claim(level, other, foreign);
+        try {
+            level.setBlock(machine, Blocks.FURNACE.defaultBlockState(), 3);
+            BlockEntity be = level.getBlockEntity(machine);
+            if (be == null) h.fail("нет блок-сущности печи");
+            FakePlayer fake = FakePlayerFactory.getMinecraft(level);
+            if (level.mayInteract(fake, ownNext)) h.fail("без тика машины общий фейк прошёл на землю команды");
+            BlockEntity prev = Machines.ticking(be);
+            try {
+                if (!level.mayInteract(fake, ownNext)) h.fail("машина на своей земле не достала соседний свой чанк");
+                if (level.mayInteract(fake, foreign)) h.fail("машина достала чужую землю через границу");
+            } finally {
+                Machines.ticking(prev);
+            }
+            if (Machines.ticking() != null) h.fail("тикающая машина не снята");
+            DenyLog log = ClaimsServer.log();
+            if (log == null || log.pending(other).stream().noneMatch(e -> e.machine() && e.name().contains("minecraft:furnace"))) {
+                h.fail("отказ через границу не попал в журнал соседа с именем машины");
+            }
+        } finally {
+            level.setBlock(machine, Blocks.AIR.defaultBlockState(), 3);
+            free(level, machine, ownNext, foreign);
+        }
+        done(h);
+    }
+
     private static void place(ServerLevel level, FakePlayer player, BlockPos floor) {
         ItemStack stack = new ItemStack(Items.OAK_PLANKS);
         player.setItemInHand(InteractionHand.MAIN_HAND, stack);

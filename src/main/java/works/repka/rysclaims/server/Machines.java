@@ -112,6 +112,39 @@ public final class Machines {
         VOUCHED.set(on ? Boolean.TRUE : null);
     }
 
+    /**
+     * Блок-сущность, которая сейчас тикает на сервере ({@code mixin/BlockEntityTickMixin}), или null (разбор фейков 20.11).
+     * Фейковый игрок, который действует внутри её тика, работает за неё: её место это место машины, ему верим (в
+     * отличие от позиции фейка). Пишет только поток сервера (клиентские блок-сущности перехват пропускает), значение
+     * живёт ровно на время тика и снимается в {@code finally}: ссылка на блок-сущность не задерживается.
+     */
+    private static @Nullable BlockEntity ticking;
+
+    public static @Nullable BlockEntity ticking() {
+        return ticking;
+    }
+
+    /** Ставит тикающую блок-сущность и возвращает прежнюю (её вернуть после тика). */
+    public static @Nullable BlockEntity ticking(@Nullable BlockEntity be) {
+        BlockEntity prev = ticking;
+        ticking = be;
+        return prev;
+    }
+
+    /** Чанк тикающей машины в мировых координатах для {@code level} или {@code Long.MIN_VALUE}, если машины нет или она в другом мире. */
+    public static long tickingChunk(Level level) {
+        BlockEntity be = ticking;
+        if (be == null || be.getLevel() != level || be.isRemoved()) return Long.MIN_VALUE;
+        BlockPos f = SableLand.toWorld(level, be.getBlockPos());
+        return Chunks.pack(f.getX() >> 4, f.getZ() >> 4);
+    }
+
+    /** Имя тикающей машины для журнала (тип и место) или null. */
+    public static @Nullable String tickingName(Level level) {
+        BlockEntity be = ticking;
+        return be == null || be.getLevel() != level ? null : name(be);
+    }
+
     private static final ThreadLocal<BlockEntity> ACTOR = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> VOUCHED = new ThreadLocal<>();
 

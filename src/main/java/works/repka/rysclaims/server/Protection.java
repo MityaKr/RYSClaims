@@ -50,6 +50,7 @@ import works.repka.rysclaims.RYSClaims;
 import works.repka.rysclaims.compat.gravestone.Graves;
 import works.repka.rysclaims.compat.sable.SableLand;
 import works.repka.rysclaims.data.Chunks;
+import works.repka.rysclaims.data.FakeProfiles;
 import works.repka.rysclaims.net.ClaimsNet;
 import works.repka.rysclaims.data.Rights;
 import works.repka.rysclaims.data.Settings;
@@ -168,7 +169,7 @@ public final class Protection {
         if (world != pos && homeAllows(s, level, pos, player)) return true;
         if (!relevant(s, dim)) return true;
         long chunk = Chunks.pack(world.getX() >> 4, world.getZ() >> 4);
-        if (player instanceof FakePlayer fake) return machine(s, fake, dim, chunk, action);
+        if (player instanceof FakePlayer fake) return machine(s, fake, dim, Machines.tickingChunk(level), chunk, action);
         return s.can(player.getUUID(), dim, chunk, action);
     }
 
@@ -183,14 +184,13 @@ public final class Protection {
         return s.relation(player.getUUID(), home) == Rights.Relation.TEAM;
     }
 
-    /** Фейковый игрок: список имён команды, затем профиль и «Машины снаружи». Место не доверяем. */
-    static boolean machine(ClaimService s, FakePlayer fake, String dim, long chunk, Rights.Action action) {
+    /**
+     * Фейковый игрок (разбор фейков 20.11): {@link ClaimService#canFake}. Хозяин это его UUID, кроме общих профилей модов
+     * ({@link FakeProfiles}); место это тикающая блок-сущность ({@code from}), позиции самого фейка не верим.
+     */
+    static boolean machine(ClaimService s, FakePlayer fake, String dim, long from, long chunk, Rights.Action action) {
         if (Machines.vouched()) return true;
-        UUID owner = s.data().owner(dim, chunk);
-        if (owner == null) return !s.settings().wildernessClosed(dim) || s.can(fake.getUUID(), dim, chunk, action);
-        TeamLand land = s.data().land(owner);
-        if (land != null && land.machineNames.contains(fake.getGameProfile().getName())) return true;
-        return s.canMachine(dim, Long.MIN_VALUE, fake.getUUID(), chunk, action);
+        return s.canFake(dim, from, FakeProfiles.owner(fake.getUUID()), fake.getGameProfile().getName(), chunk, action);
     }
 
     /** Отказ: в журнал хозяев земли и, живому игроку, причина не чаще раза в секунду. */
@@ -207,7 +207,13 @@ public final class Protection {
         UUID owner = s.data().owner(dim, chunk);
         if (owner != null) {
             DenyLog log = ClaimsServer.log();
-            if (log != null) log.add(owner, player.getUUID(), player.getGameProfile().getName(), fake, reason, dim, world.getX(), world.getY(), world.getZ());
+            String name = player.getGameProfile().getName();
+            if (fake) {
+                // в журнале видно, какая машина: тип и место тикающей блок-сущности, иначе только имя фейка
+                String at = Machines.tickingName(level);
+                if (at != null) name = at + " (" + name + ")";
+            }
+            if (log != null) log.add(owner, player.getUUID(), name, fake, reason, dim, world.getX(), world.getY(), world.getZ());
             if (!fake) Alerts.denied(s, owner, player.getUUID(), player.getGameProfile().getName(), reason, dim, world);
         }
         if (!fake && player instanceof ServerPlayer sp) feedback(s, sp, reason, owner);
@@ -540,6 +546,7 @@ public final class Protection {
         boolean mob = player == null && (indirect instanceof Mob || direct instanceof Mob);
         BlockPos cpos = SableLand.toWorld(level, BlockPos.containing(ex.center()));
         long center = Chunks.pack(cpos.getX() >> 4, cpos.getZ() >> 4);
+        long from = player instanceof FakePlayer ? Machines.tickingChunk(level) : Long.MIN_VALUE;
         Map<Long, Boolean> byChunk = new HashMap<>();
         Map<UUID, BlockPos> saved = new HashMap<>();
         Iterator<BlockPos> it = e.getAffectedBlocks().iterator();
@@ -547,7 +554,7 @@ public final class Protection {
             BlockPos pos = it.next();
             BlockPos w = SableLand.toWorld(level, pos);
             long chunk = Chunks.pack(w.getX() >> 4, w.getZ() >> 4);
-            boolean ok = byChunk.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, center, Rights.Action.BUILD));
+            boolean ok = byChunk.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, center, from, Rights.Action.BUILD));
             if (!ok) {
                 it.remove();
                 UUID owner = s.data().owner(dim, chunk);
@@ -569,18 +576,18 @@ public final class Protection {
             Entity target = ents.next();
             if (target instanceof Player || target instanceof Enemy) continue;
             long chunk = Chunks.pack(target.getBlockX() >> 4, target.getBlockZ() >> 4);
-            boolean ok = byChunkEntity.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, center, Rights.Action.ENTITY));
+            boolean ok = byChunkEntity.computeIfAbsent(chunk, ch -> explosionMay(s, dim, ch, player, mob, center, from, Rights.Action.ENTITY));
             if (!ok) ents.remove();
         }
     }
 
     private static boolean explosionMay(ClaimService s, String dim, long chunk, @Nullable Player player, boolean mob, long center,
-                                        Rights.Action action) {
+                                        long from, Rights.Action action) {
         UUID owner = s.data().owner(dim, chunk);
         if (owner == null || !s.settings().protection) return true;
         TeamLand land = s.data().land(owner);
         if (player != null) {
-            if (player instanceof FakePlayer fake) return machine(s, fake, dim, chunk, action);
+            if (player instanceof FakePlayer fake) return machine(s, fake, dim, from, chunk, action);
             return s.can(player.getUUID(), dim, chunk, action);
         }
         if (mob) return s.flag(owner, TeamLand.Flag.MOB_GRIEF);

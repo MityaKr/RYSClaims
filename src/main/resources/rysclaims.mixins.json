@@ -4,6 +4,7 @@
   "package": "works.repka.rysclaims.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "BlockEntityTickMixin",
     "BlockItemMixin",
     "ButtonMixin",
     "CrafterMixin",
