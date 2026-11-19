@@ -52,9 +52,13 @@ public final class ClaimsClient {
             e.register(OPEN);
             e.register(CLAIM_HERE);
         });
-        modBus.addListener((FMLClientSetupEvent e) -> e.enqueueWork(() -> DockButton.builder("rysclaims_land")
-            .label(Component.translatable("rysclaims.dock")).description(() -> Component.translatable("rysclaims.dock.description"))
-            .tile(0xFFD9714F).icon(Icons.Shape.SHIELD).key(OPEN).order(21).action(LandScreen::open).register()));
+        // с RYSMap земля живёт вкладкой окна карты, своя плитка в панели была бы второй дверью туда же (разбор логики
+        // 19.11, раздел 5, пункт 1); клавиша «Земля» остаётся и открывает вкладку
+        if (!net.neoforged.fml.ModList.get().isLoaded("rysmap")) {
+            modBus.addListener((FMLClientSetupEvent e) -> e.enqueueWork(() -> DockButton.builder("rysclaims_land")
+                .label(Component.translatable("rysclaims.dock")).description(() -> Component.translatable("rysclaims.dock.description"))
+                .tile(0xFFD9714F).icon(Icons.Shape.SHIELD).key(OPEN).order(21).action(LandScreen::open).register()));
+        }
         LandLayer.register();
         // земля внутри окна карты: режим «Приват» и вкладка «Земля» (З7, ядро 1.12)
         LandMap.register();
