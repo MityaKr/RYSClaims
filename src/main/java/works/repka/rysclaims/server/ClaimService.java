@@ -302,6 +302,7 @@ public final class ClaimService {
         boolean any = adjacent && hasLand(team, dim);
         long now = clock.getAsLong();
         LongList todo = new LongArrayList(chunks);
+        it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap buffered = null;
         boolean progress = true;
         while (!todo.isEmpty() && progress) {
             progress = false;
@@ -325,13 +326,19 @@ public final class ClaimService {
                     r.skip(Skip.LIMIT);
                     continue;
                 }
-                if (!admin && s.bufferChunks > 0 && nearStranger(team, dim, chunk, s.bufferChunks)) {
-                    r.skip(Skip.BUFFER);
-                    continue;
-                }
                 if (adjacent && any && !touches(team, dim, chunk)) {
                     later.add(chunk);
                     continue;
+                }
+                // буфер дороже соседства (квадрат вокруг чанка): после него и один раз на чанк (разбор логики 19.11, пункт 3)
+                if (!admin && s.bufferChunks > 0) {
+                    if (buffered == null) buffered = new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap();
+                    final UUID tm = team;
+                    final String dm = dim;
+                    if (buffered.computeIfAbsent(chunk, ch -> nearStranger(tm, dm, ch, s.bufferChunks))) {
+                        r.skip(Skip.BUFFER);
+                        continue;
+                    }
                 }
                 data.put(dim, chunk, team, actor, now);
                 any = true;
