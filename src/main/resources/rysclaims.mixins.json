@@ -6,6 +6,7 @@
   "mixins": [
     "BlockItemMixin",
     "ButtonMixin",
+    "CrafterMixin",
     "DispenserMixin",
     "DropperMixin",
     "EndermanTakeBlockGoalMixin",
