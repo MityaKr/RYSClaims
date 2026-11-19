@@ -33,6 +33,8 @@ public final class ClaimsNet {
     public static final int MAX_REGIONS = 64, MAX_EDIT = 1024;
     /** Бит действий в {@link TeamEntry#access()}: строить, открывать, двери, животные (порядок {@code Rights.Action}). */
     public static final int BUILD = 1, OPEN = 2, USE = 4, ENTITY = 8;
+    /** У команды есть участки со своими правами: биты выше верны не везде, гасить нажатие клиенту нельзя. */
+    public static final int MIXED = 16;
 
     private ClaimsNet() {}
 

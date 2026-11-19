@@ -193,6 +193,13 @@ public final class Plots {
         land.nextPlot = a.nextId;
         for (int id : a.removed) land.plots.remove(id);
         a.created.forEach((id, name) -> land.plots.put(id, new Plot(id, name, dimension)));
+        // отрезанная часть участка со своими правами получает те же права
+        for (Event ev : a.events) {
+            if (ev.kind() != Event.Kind.SPLIT) continue;
+            Plot origin = land.plots.get(ev.keptId());
+            Plot part = land.plots.get(ev.otherId());
+            if (origin != null && part != null && origin.rights != null) part.rights = origin.rights.copy();
+        }
         for (Long2IntOpenHashMap.Entry e : a.plot.long2IntEntrySet()) {
             Claim cl = data.get(dimension, e.getLongKey());
             if (cl != null) cl.plot = e.getIntValue();

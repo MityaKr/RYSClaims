@@ -662,18 +662,44 @@ public final class ClaimService {
     public boolean can(UUID player, String dim, long chunk, Rights.Action action) {
         Settings s = settings.get();
         if (!s.protection || bypass.contains(player)) return true;
-        UUID owner = data.owner(dim, chunk);
-        if (owner == null) return !s.wildernessClosed(dim);
-        return allows(player, owner, action);
+        Claim c = data.get(dim, chunk);
+        if (c == null) return !s.wildernessClosed(dim);
+        return allows(player, c.team(), action, plotRights(c));
+    }
+
+    /** Свои права участка чанка или null (права команды). */
+    public @Nullable Rights plotRights(Claim c) {
+        if (c.plot() <= 0) return null;
+        TeamLand land = data.land(c.team());
+        Plot p = land == null ? null : land.plots.get(c.plot());
+        return p == null ? null : p.rights;
+    }
+
+    /**
+     * Свои права участка (план, раздел 6 «Потом»): {@code rights} null возвращает права команды. Правит тот, кому можно
+     * права ({@link #editsRights}). Версия прав растёт: клиенты узнают, что у команды права участков разные.
+     */
+    public boolean setPlotRights(@Nullable UUID actor, UUID team, int plotId, @Nullable Rights rights, boolean admin) {
+        if (!editsRights(actor, team, admin)) return false;
+        Plot p = plot(team, plotId);
+        if (p == null) return false;
+        p.rights = rights == null ? null : rights.copy();
+        accessEdited(team);
+        return true;
     }
 
     /** Может ли игрок сделать действие на земле команды {@code owner}: то же, что {@link #can}, без поиска чанка (окно, подсказка). */
     public boolean allows(UUID player, UUID owner, Rights.Action action) {
+        return allows(player, owner, action, null);
+    }
+
+    /** То же, с правами участка вместо прав команды ({@code plot} null: права команды). */
+    public boolean allows(UUID player, UUID owner, Rights.Action action, @Nullable Rights plot) {
         Settings s = settings.get();
         if (!s.protection || bypass.contains(player)) return true;
         Rights.Relation rel = relation(player, owner);
         TeamLand land = data.land(owner);
-        Rights rights = land == null ? s.defaultRights : land.rights;
+        Rights rights = plot != null ? plot : land == null ? s.defaultRights : land.rights;
         String role = null;
         if (rel == Rights.Relation.TEAM && !player.equals(owner)) {
             if (land != null && land.legacyMembers.contains(player)) role = player.equals(land.legacyOwner) ? Rights.LEADER : Rights.MEMBER;

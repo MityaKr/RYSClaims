@@ -654,6 +654,8 @@ public final class ClaimSync {
     static int access(ClaimService s, UUID player, UUID team) {
         int bits = 0;
         for (Rights.Action a : Rights.Action.values()) if (s.allows(player, team, a)) bits |= 1 << a.ordinal();
+        works.repka.rysclaims.data.TeamLand land = s.data().land(team);
+        if (land != null && land.mixedRights()) bits |= ClaimsNet.MIXED;
         return bits;
     }
 

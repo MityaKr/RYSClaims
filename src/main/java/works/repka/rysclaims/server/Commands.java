@@ -90,12 +90,13 @@ public final class Commands {
                 .then(net.minecraft.commands.Commands.argument("days", IntegerArgumentType.integer(1, ClaimService.MAX_LEASE_DAYS))
                     .executes(c -> offerPlot(c, IntegerArgumentType.getInteger(c, "days"), -1)))))
             // из окна «Участки»: участок по номеру, стоять на нём не нужно
-            .then(lit("id").then(net.minecraft.commands.Commands.argument("plot", IntegerArgumentType.integer(1))
+            .then(lit("id").then(plotRights(net.minecraft.commands.Commands.argument("plot", IntegerArgumentType.integer(1)), 0)
                 .then(lit("give").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.string())
                     .executes(c -> offerPlot(c, 0, IntegerArgumentType.getInteger(c, "plot")))))
                 .then(lit("lend").then(net.minecraft.commands.Commands.argument("team", StringArgumentType.string())
                     .then(net.minecraft.commands.Commands.argument("days", IntegerArgumentType.integer(1, ClaimService.MAX_LEASE_DAYS))
                         .executes(c -> offerPlot(c, IntegerArgumentType.getInteger(c, "days"), IntegerArgumentType.getInteger(c, "plot"))))))))
+            .then(plotRights(lit("rights"), -1))
             .then(lit("accept").executes(c -> plotAnswer(c, true)))
             .then(lit("decline").executes(c -> plotAnswer(c, false)))
             .then(lit("return").executes(Commands::returnPlot))
@@ -376,6 +377,52 @@ public final class Commands {
         UUID player = c.getSource().getPlayerOrException().getUUID();
         Component result = Membership.answer(player, kind, yes);
         c.getSource().sendSuccess(() -> result, false);
+        return 1;
+    }
+
+    /** Наборы своих прав участка: {@code team} снимает свои права (действуют права команды). */
+    private static final String[] PLOT_SETS = {"team", "only_team", "team_and_allies", "open_base", "open"};
+
+    /** {@code rights <набор>} у участка под ногами ({@code byId} -1) или по номеру из аргумента {@code plot}. */
+    private static <T extends com.mojang.brigadier.builder.ArgumentBuilder<CommandSourceStack, T>> T plotRights(T node, int byId) {
+        if (byId < 0) {
+            // узел уже называется rights: участок под ногами
+            for (String set : PLOT_SETS) node.then(lit(set).executes(c -> setPlotRights(c, set, -1)));
+            return node;
+        }
+        var rights = lit("rights");
+        for (String set : PLOT_SETS) rights.then(lit(set).executes(c -> setPlotRights(c, set, IntegerArgumentType.getInteger(c, "plot"))));
+        return node.then(rights);
+    }
+
+    private static int setPlotRights(CommandContext<CommandSourceStack> c, String set, int plotId) throws CommandSyntaxException {
+        ClaimService s = service();
+        CommandSourceStack src = c.getSource();
+        ServerPlayer player = src.getPlayerOrException();
+        UUID team = s.teams().teamOf(player.getUUID());
+        int id = plotId;
+        if (id <= 0) {
+            String dim = Loader.id(src.getLevel().dimension());
+            long chunk = Chunks.pack(net.minecraft.util.Mth.floor(src.getPosition().x) >> 4, net.minecraft.util.Mth.floor(src.getPosition().z) >> 4);
+            Claim claim = s.data().get(dim, chunk);
+            if (claim == null || !claim.team().equals(team)) throw new SimpleCommandExceptionType(Msg.t("error.not_own_plot", "Stand on your team's land")).create();
+            id = claim.plot();
+        }
+        Rights r = switch (set) {
+            case "team" -> null;
+            case "only_team" -> Rights.of(Rights.Preset.TEAM);
+            case "team_and_allies" -> Rights.of(Rights.Preset.TEAM_AND_ALLIES);
+            case "open_base" -> Rights.openBase();
+            default -> Rights.of(Rights.Preset.OPEN);
+        };
+        works.repka.rysclaims.data.Plot p = s.plot(team, id);
+        if (p == null) return fail(src, Msg.t("plot.not_found", "No such plot in your team"));
+        if (!s.setPlotRights(player.getUUID(), team, id, r, s.bypass(player.getUUID()) && player.hasPermissions(2))) {
+            return fail(src, Msg.t("error.no_right", "Your role in the team cannot do this"));
+        }
+        Component name = plotName(p);
+        src.sendSuccess(() -> r == null ? Msg.t("plot.rights.team", "Plot %s uses the team rights again", name)
+            : Msg.t("plot.rights.set", "Plot %s has its own rights: %s", name, Msg.t("plot.set." + set, set)), false);
         return 1;
     }
 

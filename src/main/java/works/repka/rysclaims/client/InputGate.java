@@ -132,6 +132,8 @@ public final class InputGate {
     private static @Nullable Denial check(String dim, BlockPos pos, Rights.Action action) {
         LandCache.ChunkState st = LandCache.at(dim, pos.getX() >> 4, pos.getZ() >> 4);
         if (st == null || !LandCache.fresh(st.team())) return null;
+        // у участков команды свои права: общие биты верны не везде, решает сервер
+        if (st.team().can(ClaimsNet.MIXED)) return null;
         int bit = 1 << action.ordinal();
         if (st.team().can(bit)) return null;
         ClaimsNet.Hello h = LandCache.hello();

@@ -148,6 +148,7 @@ public final class LandLayer implements MapApi.Layer, MapApi.Areas {
 
     /** Что можно тебе на земле команды одной строкой: «Тебе здесь: только смотреть» или «Тебе здесь можно: открывать, двери». */
     static Component rightsLine(LandCache.TeamInfo team) {
+        if (team.can(ClaimsNet.MIXED)) return Component.translatable("rysclaims.tip.mixed");
         List<String> can = new ArrayList<>();
         for (int i = 0; i < RIGHT_KEYS.length; i++) {
             if (team.can(RIGHT_BITS[i])) can.add(Component.translatable("rysclaims.tip.can." + RIGHT_KEYS[i]).getString());

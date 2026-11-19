@@ -2,6 +2,8 @@ package works.repka.rysclaims;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -462,6 +464,34 @@ class ClaimServiceTest {
         service.idleTick();
         assertEquals(9, service.releasing(TEAM)[0], "через 30 дней без входа земля освобождается");
         settings.idleUnclaimDays = 0;
+    }
+
+    /** Свои права участка: открытый участок у закрытой команды, разрез сохраняет права, файл тоже. */
+    @Test
+    void plotOwnRights() {
+        service.claim(LEADER, TEAM, OW, Chunks.square(0, 0, 1), false);
+        service.claim(LEADER, TEAM, OW, one(5, 5), false);
+        int shop = data.get(OW, Chunks.pack(5, 5)).plot();
+        assertFalse(service.can(STRANGER, OW, Chunks.pack(5, 5), Rights.Action.OPEN));
+        assertFalse(service.setPlotRights(MEMBER, TEAM, shop, Rights.openBase(), false), "участнику без права нельзя");
+        assertTrue(service.setPlotRights(LEADER, TEAM, shop, Rights.openBase(), false));
+        assertTrue(service.can(STRANGER, OW, Chunks.pack(5, 5), Rights.Action.OPEN), "в магазине чужой открывает");
+        assertFalse(service.can(STRANGER, OW, Chunks.pack(5, 5), Rights.Action.BUILD), "но не строит");
+        assertFalse(service.can(STRANGER, OW, Chunks.pack(0, 0), Rights.Action.OPEN), "на базе по-прежнему нельзя");
+        assertTrue(data.land(TEAM).mixedRights());
+        assertNotNull(ClaimData.load(data.save(), settings.defaultRights).land(TEAM).plots.get(shop).rights, "права участка в файле");
+        // разрез: обе части с правами магазина
+        service.claim(LEADER, TEAM, OW, one(5, 6), false);
+        service.claim(LEADER, TEAM, OW, one(5, 7), false);
+        assertEquals(shop, data.get(OW, Chunks.pack(5, 7)).plot(), "пристроенное входит в магазин");
+        service.release(LEADER, TEAM, OW, one(5, 6), false);
+        now += 60_000;
+        service.tick();
+        assertNotEquals(data.get(OW, Chunks.pack(5, 5)).plot(), data.get(OW, Chunks.pack(5, 7)).plot(), "участок разрезан");
+        assertTrue(service.can(STRANGER, OW, Chunks.pack(5, 7), Rights.Action.OPEN), "отрезанная часть с теми же правами");
+        assertTrue(service.can(STRANGER, OW, Chunks.pack(5, 5), Rights.Action.OPEN));
+        assertTrue(service.setPlotRights(LEADER, TEAM, data.get(OW, Chunks.pack(5, 5)).plot(), null, false));
+        assertFalse(service.can(STRANGER, OW, Chunks.pack(5, 5), Rights.Action.OPEN), "права команды вернулись");
     }
 
     /** Передача и аренда участка: лимит получателя, аренда возвращается по сроку, арендатор не освобождает. */

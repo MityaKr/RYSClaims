@@ -1503,6 +1503,7 @@ public final class LandView {
                     new Kit.Option(Words.t("plots.menu.rename"), "", h.canClaim()),
                     new Kit.Option(Words.t("plots.menu.show"), "", true),
                     new Kit.Option(Words.t("plots.menu.unload"), "", h.canForce() && p.forced() > 0),
+                    new Kit.Option(Words.t("plots.menu.rights"), "", h.canRights()),
                     new Kit.Option(Words.t("plots.menu.give"), "", h.canClaim()),
                     new Kit.Option(Words.t("plots.menu.lend"), "", h.canClaim()),
                     new Kit.Option(Words.t("plots.menu.release"), "", h.canClaim()));
@@ -1512,8 +1513,9 @@ public final class LandView {
                         case 1 -> showOnMap(p);
                         case 2 -> landEdit(ClaimsNet.LAND_UNLOAD_PLOT, p.id(), false, "");
                         // передача и аренда: команда в чате с номером участка, игрок дописывает команду-получателя
-                        case 3 -> chat("/claims plot id " + p.id() + " give ");
-                        case 4 -> chat("/claims plot id " + p.id() + " lend ");
+                        case 3 -> chat("/claims plot id " + p.id() + " rights ");
+                        case 4 -> chat("/claims plot id " + p.id() + " give ");
+                        case 5 -> chat("/claims plot id " + p.id() + " lend ");
                         default -> askRelease(p);
                     }
                 });

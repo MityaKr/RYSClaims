@@ -89,6 +89,12 @@ public final class TeamLand {
     public @Nullable UUID legacyOwner;
     /** Участки по номерам (план, раздел 6). Номера не переиспользуются: {@link #nextPlot}. */
     public final java.util.Map<Integer, Plot> plots = new java.util.LinkedHashMap<>();
+
+    /** Есть ли участок со своими правами: тогда клиент не гасит нажатия на земле команды по её общим правам. */
+    public boolean mixedRights() {
+        for (Plot p : plots.values()) if (p.rights != null) return true;
+        return false;
+    }
     public int nextPlot = 1;
 
     int claimed, forced;
@@ -165,6 +171,7 @@ public final class TeamLand {
             one.putInt("id", p.id);
             one.putString("name", p.name);
             one.putString("dim", p.dim);
+            if (p.rights != null) one.put("rights", p.rights.save());
             pl.add(one);
         }
         t.put("plots", pl);
@@ -212,7 +219,9 @@ public final class TeamLand {
             CompoundTag one = (CompoundTag) x;
             int pid = one.getInt("id");
             if (pid <= 0 || !one.contains("dim")) continue;
-            land.plots.put(pid, new Plot(pid, one.getString("name"), one.getString("dim")));
+            Plot p = new Plot(pid, one.getString("name"), one.getString("dim"));
+            if (one.contains("rights")) p.rights = Rights.load(one.getCompound("rights"), land.rights);
+            land.plots.put(pid, p);
             land.nextPlot = Math.max(land.nextPlot, pid + 1);
         }
         land.nextPlot = Math.max(land.nextPlot, t.getInt("nextPlot"));

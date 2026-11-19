@@ -233,7 +233,7 @@ public final class ClaimData {
             TeamLand dst = landOrCreate(to);
             for (Plot p : src.plots.values()) {
                 int id = dst.nextPlot++;
-                dst.plots.put(id, new Plot(id, p.name, p.dim));
+                dst.plots.put(id, p.copy(id));
                 remap.put(p.id, id);
                 if (plotMap != null) plotMap.put(id, p.id);
             }
@@ -283,7 +283,7 @@ public final class ClaimData {
      */
     public void restorePlots(UUID team, PlotSnapshot snap) {
         TeamLand land = landOrCreate(team);
-        for (Plot p : snap.plots().values()) land.plots.put(p.id, new Plot(p.id, p.name, p.dim));
+        for (Plot p : snap.plots().values()) land.plots.put(p.id, p.copy(p.id));
         land.nextPlot = Math.max(land.nextPlot, snap.nextPlot());
         for (Map.Entry<String, it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap> e : snap.chunks().entrySet()) {
             Long2ObjectOpenHashMap<Claim> map = dims.get(e.getKey());
