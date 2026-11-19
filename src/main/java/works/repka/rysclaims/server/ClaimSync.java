@@ -68,6 +68,8 @@ public final class ClaimSync {
     /** Команды, у чьих участников окно должно получить новое {@code LandState}. */
     private static final Set<UUID> STATE = new HashSet<>();
     private static boolean all;
+    /** Регионы, которые подписчикам надо прислать заново (видимость одной команды сменилась): измерение → регионы. */
+    private static final Map<String, LongOpenHashSet> RESEND = new HashMap<>();
     private static int ticks;
     /**
      * Версия прав (план 9.2, «Гашение нажатия»): растёт при любой перемене, от которой зависит, что игроку можно на чужой
@@ -100,6 +102,7 @@ public final class ClaimSync {
         CHANGED.clear();
         TOUCHED.clear();
         STATE.clear();
+        RESEND.clear();
         all = false;
         accessDirty = false;
     }
@@ -119,6 +122,19 @@ public final class ClaimSync {
     /** Текущая версия прав (для проверок). */
     public static int epoch() {
         return epoch;
+    }
+
+    /**
+     * Видимость команды сменилась: заново только регионы с её чанками (разбор логики 19.11, раздел 5, пункт 2), а не все
+     * регионы всех подписчиков.
+     */
+    public static void resendTeam(ClaimService s, UUID team) {
+        if (VIEWERS.isEmpty()) return;
+        for (String dim : s.data().dimensions()) {
+            for (var c : s.data().claims(dim).values()) {
+                if (c.team().equals(team)) RESEND.computeIfAbsent(dim, d -> new LongOpenHashSet()).add(RegionBytes.regionOf(c.pos()));
+            }
+        }
     }
 
     /** Имена или цвета команд могли смениться: всем подписчикам их регионы заново. */
@@ -151,6 +167,7 @@ public final class ClaimSync {
             CHANGED.clear();
             TOUCHED.clear();
             STATE.clear();
+            RESEND.clear();
             all = false;
             accessDirty = false;
             return;
@@ -167,14 +184,26 @@ public final class ClaimSync {
         }
         if (all) {
             all = false;
+            RESEND.clear();
             CHANGED.clear();
             for (Map.Entry<UUID, Viewer> e : VIEWERS.entrySet()) {
                 ServerPlayer p = server.getPlayerList().getPlayer(e.getKey());
                 if (p == null) continue;
                 for (long r : e.getValue().regions) sendRegion(s, p, e.getValue(), e.getValue().dimension, r);
             }
-        } else if (!CHANGED.isEmpty()) {
-            flush(server, s);
+        } else {
+            if (!RESEND.isEmpty()) {
+                for (Map.Entry<UUID, Viewer> e : VIEWERS.entrySet()) {
+                    Viewer v = e.getValue();
+                    LongOpenHashSet want = RESEND.get(v.dimension);
+                    if (want == null) continue;
+                    ServerPlayer p = server.getPlayerList().getPlayer(e.getKey());
+                    if (p == null) continue;
+                    for (long r : v.regions) if (want.contains(r)) sendRegion(s, p, v, v.dimension, r);
+                }
+                RESEND.clear();
+            }
+            if (!CHANGED.isEmpty()) flush(server, s);
         }
         if (!STATE.isEmpty()) {
             Map<UUID, ClaimsNet.LandState> built = new HashMap<>();

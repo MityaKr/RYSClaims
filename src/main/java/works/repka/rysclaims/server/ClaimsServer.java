@@ -262,7 +262,7 @@ public final class ClaimsServer {
         @Override
         public void visibilityChanged(UUID team) {
             ClaimSync.accessChanged();
-            ClaimSync.resendAll();
+            if (service != null) ClaimSync.resendTeam(service, team);
         }
     }
 }
