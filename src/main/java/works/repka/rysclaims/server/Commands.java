@@ -453,6 +453,7 @@ public final class Commands {
     private static int offerPlot(CommandContext<CommandSourceStack> c, int days, int plotId) throws CommandSyntaxException {
         ClaimService s = service();
         CommandSourceStack src = c.getSource();
+        if (!s.settings().plotDeals) return fail(src, Msg.t("plot.deals_off", "Giving and leasing plots is turned off on this server (plotDeals)"));
         ServerPlayer player = src.getPlayerOrException();
         UUID from = s.teams().teamOf(player.getUUID());
         String dim;

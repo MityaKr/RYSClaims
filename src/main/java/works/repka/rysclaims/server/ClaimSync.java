@@ -647,7 +647,7 @@ public final class ClaimSync {
             }
         }
         TeamLand.Visibility vis = land == null ? TeamLand.Visibility.ALL : land.visibility;
-        return new ClaimsNet.LandState(team, flags, mask, values, vis.ordinal(), s.settings().pvpMode.ordinal(), trusted, plots);
+        return new ClaimsNet.LandState(team, flags, mask, values, vis.ordinal(), s.settings().pvpMode.ordinal(), trusted, plots, s.settings().plotDeals);
     }
 
     // ---- что уходит ----

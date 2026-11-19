@@ -1499,24 +1499,33 @@ public final class LandView {
             if (p == null) {
                 plotMenu.close();
             } else {
-                List<Kit.Option> options = List.of(
+                ClaimsNet.LandState ls = LandCache.state();
+                boolean deals = ls != null && ls.plotDeals();
+                List<Kit.Option> options = new ArrayList<>(List.of(
                     new Kit.Option(Words.t("plots.menu.rename"), "", h.canClaim()),
                     new Kit.Option(Words.t("plots.menu.show"), "", true),
                     new Kit.Option(Words.t("plots.menu.unload"), "", h.canForce() && p.forced() > 0),
-                    new Kit.Option(Words.t("plots.menu.rights"), "", h.canRights()),
-                    new Kit.Option(Words.t("plots.menu.give"), "", h.canClaim()),
-                    new Kit.Option(Words.t("plots.menu.lend"), "", h.canClaim()),
-                    new Kit.Option(Words.t("plots.menu.release"), "", h.canClaim()));
+                    new Kit.Option(Words.t("plots.menu.rights"), "", h.canRights())));
+                // передача и аренда только если сервер их включил (plotDeals, разбор логики 19.11, пункт 9)
+                if (deals) {
+                    options.add(new Kit.Option(Words.t("plots.menu.give"), "", h.canClaim()));
+                    options.add(new Kit.Option(Words.t("plots.menu.lend"), "", h.canClaim()));
+                }
+                options.add(new Kit.Option(Words.t("plots.menu.release"), "", h.canClaim()));
+                int releaseAt = options.size() - 1;
                 Kit.dropdownList(g, t, hits, plotMenu, options, -1, 150, mx, my, i -> {
+                    if (i == releaseAt) {
+                        askRelease(p);
+                        return;
+                    }
                     switch (i) {
                         case 0 -> startRename(p.id(), p.name());
                         case 1 -> showOnMap(p);
                         case 2 -> landEdit(ClaimsNet.LAND_UNLOAD_PLOT, p.id(), false, "");
-                        // передача и аренда: команда в чате с номером участка, игрок дописывает команду-получателя
                         case 3 -> chat("/claims plot id " + p.id() + " rights ");
                         case 4 -> chat("/claims plot id " + p.id() + " give ");
                         case 5 -> chat("/claims plot id " + p.id() + " lend ");
-                        default -> askRelease(p);
+                        default -> { }
                     }
                 });
             }
@@ -1946,6 +1955,9 @@ public final class LandView {
     private static final String[] OWNERLESS = {"own", "never", "always"}, CROSS = {"false", "true"}, PVP = {"always", "team", "never"},
         ALLY = {"team", "all", "none"}, LOAD = {"online", "always"}, PRESET = {"team", "team_and_allies", "open"};
 
+    /** «Сервер»: второй ряд показывает редкие настройки (буфер, простой, передача участков) вместо прав новых команд. */
+    private boolean serverDetail;
+
     private void server(GuiGraphics g, Theme t, ClaimsNet.Hello h, int mx, int my) {
         LandCache.wantAdmin(4000);
         ClaimsNet.AdminState a = LandCache.admin();
@@ -1956,6 +1968,10 @@ public final class LandView {
             return;
         }
         adminOpen = null;
+        // «Подробно» в строке пилюль справа: редкие настройки (разбор логики 19.11, раздел 5, пункт 9)
+        String more = Words.t(serverDetail ? "admin.basic" : "admin.more");
+        int mw = (int) Kit.buttonWidth(more, 12);
+        Kit.button(g, t, hits, wx + ww - 14 - mw, wy + HEADER + 6, mw, 14, more, false, mx, my, () -> serverDetail = !serverDetail);
         int cw = (w - 12) / 3, ch1 = 112, rh = 18;
         // ряд 1: лимиты, защита мира, игроки
         int y = adminCard(g, t, x, top, cw, ch1, Words.t("admin.card.limits"));
@@ -1982,8 +1998,44 @@ public final class LandView {
         choiceRow(g, t, a, ix, y + rh * 2, iw3, "allyMode", ALLY, mx, my);
         choiceRow(g, t, a, ix, y + rh * 3, iw3, "maxForceLoadMode", LOAD, mx, my);
         numberRow(g, t, a, ix, y + rh * 4, iw3, "logDays", 1, mx, my);
-        // ряд 2: права новых команд и перенос
+        // ряд 2: права новых команд и перенос; в «Подробно» редкие настройки
         int top2 = top + ch1 + 6, ch2 = 112;
+        if (serverDetail) {
+            y = adminCard(g, t, x, top2, w, ch2, Words.t("admin.card.rare"));
+            int rx = x + 8, rw = (w - 16 - 16) / 2;
+            numberRow(g, t, a, rx, y, rw, "bufferChunks", 1, mx, my);
+            numberRow(g, t, a, rx, y + rh, rw, "idleDaysBeforeUnforce", 7, mx, my);
+            numberRow(g, t, a, rx, y + rh * 2, rw, "idleDaysBeforeUnclaim", 7, mx, my);
+            toggleRow(g, t, a, rx + rw + 16, y, rw, "plotDeals", mx, my);
+            List<String> rare = Draw.wrapLabel(Words.t("admin.rare.note"), rw, 11, Weight.REGULAR, 4);
+            float ry = y + rh + 6;
+            for (String line : rare) {
+                Draw.label(g, line, rx + rw + 16, ry, 11, Weight.REGULAR, t.c("text.muted"));
+                ry += 8;
+            }
+            long left = serverUndoUntil - System.currentTimeMillis();
+            if (!serverUndo.isEmpty() && left > 0) undoBar(g, t, Words.t("admin.changed", serverUndo.size()), left, mx, my, this::serverUndo);
+            else Draw.label(g, Words.t("admin.note"), x, wy + wh - 12, 11, Weight.REGULAR, t.c("text.muted"));
+            if (adminOpen != null) {
+                String key = adminOpen;
+                String[] options = switch (key) {
+                    case "ownerlessExplosions" -> OWNERLESS;
+                    case "pvpMode" -> PVP;
+                    case "allyMode" -> ALLY;
+                    case "maxForceLoadMode" -> LOAD;
+                    default -> CROSS;
+                };
+                List<Kit.Option> opts = new ArrayList<>();
+                int sel = -1;
+                String cur = a.get(key).toLowerCase(java.util.Locale.ROOT);
+                for (int i = 0; i < options.length; i++) {
+                    opts.add(new Kit.Option(Words.t("admin.v." + key + "." + options[i])));
+                    if (options[i].equals(cur)) sel = i;
+                }
+                Kit.dropdownList(g, t, hits, adminDrops.get(key), opts, sel, 120, mx, my, i -> adminEdit("setting", key, options[i]));
+            }
+            return;
+        }
         y = adminCard(g, t, x, top2, cw * 2 + 6, ch2, Words.t("admin.card.new_teams"));
         ix = x + 8;
         int iw2 = cw * 2 + 6 - 16;

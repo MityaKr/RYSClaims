@@ -278,7 +278,7 @@ public final class ClaimsNet {
      * сервером (маска и значения), видимость, режим боя сервера, доверенные, участки. Шлётся при входе и после перемены.
      */
     public record LandState(UUID team, int flags, int lockMask, int lockValues, int visibility, int pvpMode, List<Trusted> trusted,
-                            List<PlotInfo> plots) implements CustomPacketPayload {
+                            List<PlotInfo> plots, boolean plotDeals) implements CustomPacketPayload {
         public static final Type<LandState> TYPE = new Type<>(id("land_state"));
         public static final StreamCodec<FriendlyByteBuf, LandState> CODEC = CustomPacketPayload.codec(LandState::write, LandState::read);
         /** Сколько чанков участков уходит самое большее (дальше участки приходят без чанков). */
@@ -297,7 +297,7 @@ public final class ClaimsNet {
             for (int i = 0; i < m; i++) {
                 plots.add(new PlotInfo(b.readVarInt(), b.readUtf(64), dim(b), b.readVarInt(), b.readVarLong(), b.readUtf(32), longs(b, MAX_CHUNKS)));
             }
-            return new LandState(team, flags, mask, values, vis, pvp, trusted, plots);
+            return new LandState(team, flags, mask, values, vis, pvp, trusted, plots, b.readBoolean());
         }
 
         private void write(FriendlyByteBuf b) {
@@ -325,6 +325,7 @@ public final class ClaimsNet {
                 budget -= c.length;
                 longs(b, c);
             }
+            b.writeBoolean(plotDeals);
         }
 
         @Override
