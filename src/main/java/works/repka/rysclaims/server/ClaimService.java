@@ -700,6 +700,29 @@ public final class ClaimService {
         return allows(player, owner, action, null);
     }
 
+    /**
+     * Биты всех четырёх действий на земле команды (порядок {@code Rights.Action}) с одним расчётом отношения и роли (разбор
+     * логики 19.11, раздел 5, пункт 8: {@code allows} на каждое действие считал отношение заново).
+     */
+    public int accessBits(UUID player, UUID owner) {
+        Settings s = settings.get();
+        int all = (1 << Rights.Action.values().length) - 1;
+        if (!s.protection || bypass.contains(player)) return all;
+        Rights.Relation rel = relation(player, owner);
+        TeamLand land = data.land(owner);
+        Rights rights = land == null ? s.defaultRights : land.rights;
+        String role = role(player, owner, rel, land);
+        int bits = 0;
+        for (Rights.Action a : Rights.Action.values()) if (rights.allows(a, rel, role)) bits |= 1 << a.ordinal();
+        return bits;
+    }
+
+    private @Nullable String role(UUID player, UUID owner, Rights.Relation rel, @Nullable TeamLand land) {
+        if (rel != Rights.Relation.TEAM || player.equals(owner)) return null;
+        if (land != null && land.legacyMembers.contains(player)) return player.equals(land.legacyOwner) ? Rights.LEADER : Rights.MEMBER;
+        return teams.roleOf(player);
+    }
+
     /** То же, с правами участка вместо прав команды ({@code plot} null: права команды). */
     public boolean allows(UUID player, UUID owner, Rights.Action action, @Nullable Rights plot) {
         Settings s = settings.get();

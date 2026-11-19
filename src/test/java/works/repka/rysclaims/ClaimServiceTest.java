@@ -466,6 +466,17 @@ class ClaimServiceTest {
         settings.idleUnclaimDays = 0;
     }
 
+    /** Биты доступа одним расчётом совпадают с allows по каждому действию. */
+    @Test
+    void accessBitsMatchAllows() {
+        service.trust(TEAM, STRANGER, true);
+        for (UUID who : List.of(LEADER, MEMBER, GUEST, STRANGER, ALLY)) {
+            int bits = 0;
+            for (Rights.Action a : Rights.Action.values()) if (service.allows(who, TEAM, a)) bits |= 1 << a.ordinal();
+            assertEquals(bits, service.accessBits(who, TEAM), who.toString());
+        }
+    }
+
     /** Земля сервера: занимает оператор без лимита, чужие и любая команда не строят, простой её не снимает. */
     @Test
     void serverLand() {

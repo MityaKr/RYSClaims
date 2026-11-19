@@ -215,7 +215,7 @@ public final class ClaimSync {
             }
             STATE.clear();
         }
-        boolean second = ticks % 20 == 0;
+        boolean second = ticks % 20 == 0, fifth = ticks % 100 == 0;
         boolean access = accessDirty;
         accessDirty = false;
         if (second || access || !TOUCHED.isEmpty()) {
@@ -223,7 +223,9 @@ public final class ClaimSync {
                 ServerPlayer p = server.getPlayerList().getPlayer(e.getKey());
                 if (p == null) continue;
                 if (second || access || TOUCHED.contains(s.teams().teamOf(p.getUUID()))) sendHello(s, p, e.getValue(), false);
-                if (second || access) sendAccess(s, p, e.getValue(), access);
+                // сверка прав по таймеру раз в 5 секунд (разбор логики 19.11, пункт 8): любая перемена прав и так поднимает
+                // версию (access), таймер только страховка
+                if (fifth || access) sendAccess(s, p, e.getValue(), access);
             }
             TOUCHED.clear();
         }
@@ -694,8 +696,7 @@ public final class ClaimSync {
 
     /** Что можно игроку на земле команды: биты {@code ClaimsNet.BUILD} и дальше по порядку {@code Rights.Action}. */
     static int access(ClaimService s, UUID player, UUID team) {
-        int bits = 0;
-        for (Rights.Action a : Rights.Action.values()) if (s.allows(player, team, a)) bits |= 1 << a.ordinal();
+        int bits = s.accessBits(player, team);
         works.repka.rysclaims.data.TeamLand land = s.data().land(team);
         if (land != null && land.mixedRights()) bits |= ClaimsNet.MIXED;
         return bits;
