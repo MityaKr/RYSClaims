@@ -29,10 +29,17 @@ public final class Membership {
     /** Игрок вступил: спросить о личной земле, если она есть. */
     static void joined(UUID team, UUID player) {
         LEFT.remove(player);
+        if (ClaimsServer.running()) {
+            var b = ClaimsServer.service().data().bonus(player);
+            if (b != null) b.asked = false;
+        }
         ask(player);
     }
 
-    /** Вход в игру: вопрос о личной земле, если игрок не ответил. */
+    /**
+     * Вход в игру: вопрос о личной земле, если игрок не ответил и его ещё не спрашивали после вступления (разбор скептика
+     * 18.11: при каждом входе это навязчиво; дальше хватает {@code /claims personal give} и окна).
+     */
     static void login(ServerPlayer p) {
         ask(p.getUUID());
     }
@@ -41,12 +48,16 @@ public final class Membership {
         if (!ClaimsServer.running()) return;
         ClaimService s = ClaimsServer.service();
         if (!s.personalPending(player)) return;
+        var asked = s.data().bonus(player);
+        if (asked != null && asked.asked) return;
         MinecraftServer server = ClaimsServer.server();
         ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(player);
         if (p == null) return;
         UUID team = s.teams().teamOf(player);
         int n = s.data().claimed(player);
         boolean fits = s.data().claimed(team) + n <= s.limits(team).claims;
+        s.data().bonusOrCreate(player).asked = true;
+        ClaimsServer.markDirty();
         if (ClaimsNet.accepts(p)) ClaimsNet.send(p, new ClaimsNet.Question(JOIN, n, fits, Commands.teamName(s, team).getString(), "", 0));
         else p.sendSystemMessage(Msg.t("personal.ask", "You have personal land: %s chunks. /claims personal give gives it to the team, /claims personal keep keeps it", n));
     }

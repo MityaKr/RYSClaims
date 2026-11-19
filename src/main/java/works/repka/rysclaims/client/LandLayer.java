@@ -169,9 +169,40 @@ public final class LandLayer implements MapApi.Layer, MapApi.Areas {
         ClaimsNet.Hello h = LandCache.hello();
         boolean own = h != null && st.team().id().equals(h.team());
         Component text = Component.translatable(own ? "rysclaims.status.own" : "rysclaims.status.other", shownName(st));
+        // своя земля: ещё имя участка (разбор скептика 18.11, раздел 3: «VENIK · База»)
+        String plot = own ? plotAt(id(p.level().dimension()), p.getBlockX() >> 4, p.getBlockZ() >> 4) : "";
+        if (!plot.isEmpty()) text = Component.translatable("rysclaims.status.own_plot", shownName(st), plot);
         lastStatus = MapApi.Status.of(st.team().color(), Icons.Shape.SHIELD, text);
         lastStatusAt = now;
         return lastStatus;
+    }
+
+    private static String lastPlotDim = "";
+    private static long lastPlotChunk = Long.MIN_VALUE;
+    private static String lastPlot = "";
+
+    /** Имя участка своей команды в чанке (участки приходят окну в {@code LandState}); пусто, если не знаем. */
+    private static String plotAt(String dim, int cx, int cz) {
+        long chunk = works.repka.rysclaims.data.Chunks.pack(cx, cz);
+        if (chunk == lastPlotChunk && dim.equals(lastPlotDim)) return lastPlot;
+        String name = "";
+        ClaimsNet.LandState st = LandCache.state();
+        if (st != null) {
+            for (ClaimsNet.PlotInfo p : st.plots()) {
+                if (!p.dim().equals(dim)) continue;
+                for (long c : p.chunks()) {
+                    if (c == chunk) {
+                        name = p.name().isEmpty() ? Component.translatable("rysclaims.plot.unnamed", p.id()).getString() : p.name();
+                        break;
+                    }
+                }
+                if (!name.isEmpty()) break;
+            }
+        }
+        lastPlotDim = dim;
+        lastPlotChunk = chunk;
+        lastPlot = name;
+        return name;
     }
 
     private static MapApi.@Nullable Status bypass() {

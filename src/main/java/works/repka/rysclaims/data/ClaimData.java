@@ -422,6 +422,7 @@ public final class ClaimData {
             b.putInt("bonusClaims", e.getValue().claims);
             b.putInt("bonusForce", e.getValue().force);
             if (e.getValue().keepPersonal) b.putBoolean("keepPersonal", true);
+            if (e.getValue().asked) b.putBoolean("asked", true);
             p.put(e.getKey().toString(), b);
         }
         tag.put("players", p);
@@ -475,6 +476,7 @@ public final class ClaimData {
             CompoundTag b = players.getCompound(key);
             PlayerBonus pb = new PlayerBonus(b.getInt("bonusClaims"), b.getInt("bonusForce"));
             pb.keepPersonal = b.getBoolean("keepPersonal");
+            pb.asked = b.getBoolean("asked");
             data.players.put(id, pb);
         }
         data.archive = tag.getList("archive", Tag.TAG_COMPOUND).copy();

@@ -543,6 +543,7 @@
   "rysclaims.status.bypass": "Оператор: защита снята",
   "rysclaims.status.other": "Земля «%s»",
   "rysclaims.status.own": "Своя земля · %s",
+  "rysclaims.status.own_plot": "Своя земля · %s · %s",
   "rysclaims.switch.locked": "решает сервер: %s",
   "rysclaims.switch.machinesInside": "Машины на земле команды",
   "rysclaims.switch.machinesInside.note": "буры, установщики и руки, которые стоят на этой земле",

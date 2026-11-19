@@ -6,6 +6,8 @@ public final class PlayerBonus {
     public int force;
     /** Игрок ответил «Оставить себе» на вопрос о личной земле при вступлении (макет 45): больше не спрашивать. */
     public boolean keepPersonal;
+    /** Вопрос о личной земле уже задан после вступления (разбор скептика 18.11: при каждом входе не спрашивать). */
+    public boolean asked;
 
     public PlayerBonus(int claims, int force) {
         this.claims = claims;
@@ -13,6 +15,6 @@ public final class PlayerBonus {
     }
 
     boolean isEmpty() {
-        return claims == 0 && force == 0 && !keepPersonal;
+        return claims == 0 && force == 0 && !keepPersonal && !asked;
     }
 }

@@ -543,6 +543,7 @@
   "rysclaims.status.bypass": "Operator: protection off",
   "rysclaims.status.other": "Land of %s",
   "rysclaims.status.own": "Your land · %s",
+  "rysclaims.status.own_plot": "Own land · %s · %s",
   "rysclaims.switch.locked": "set by the server: %s",
   "rysclaims.switch.machinesInside": "Machines on team land",
   "rysclaims.switch.machinesInside.note": "drills, deployers and arms standing on this land",
