@@ -487,6 +487,7 @@
   "rysclaims.set.team": "Только команда",
   "rysclaims.set.team_and_allies": "Команда и союз",
   "rysclaims.skip.already": "уже так",
+  "rysclaims.skip.buffer": "слишком близко к чужой земле",
   "rysclaims.skip.dimension": "в этом измерении занимать нельзя",
   "rysclaims.skip.force_limit": "лимит прогрузки",
   "rysclaims.skip.limit": "лимит чанков",

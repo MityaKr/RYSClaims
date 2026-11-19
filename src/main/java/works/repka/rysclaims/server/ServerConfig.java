@@ -17,7 +17,7 @@ public final class ServerConfig {
     public static final ModConfigSpec SPEC;
 
     private static final ModConfigSpec.IntValue CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, LOG_DAYS;
-    private static final ModConfigSpec.IntValue IDLE_UNFORCE, IDLE_UNCLAIM;
+    private static final ModConfigSpec.IntValue IDLE_UNFORCE, IDLE_UNCLAIM, BUFFER;
     private static final ModConfigSpec.ConfigValue<String> BONUS_MODE, MAX_LOAD, ALLY_MODE, PVP_MODE, OWNERLESS;
     private static final ModConfigSpec.BooleanValue FLUIDS, FIRE, PISTONS, HOPPERS;
     private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED, ONLY, NO_WILD_DIMS, LOCKED;
@@ -45,6 +45,8 @@ public final class ServerConfig {
         ONLY = b.comment("If not empty, land can be claimed only in these dimensions")
             .defineListAllowEmpty("onlyDimensions", List.of(), () -> "mod:dimension", o -> o instanceof String);
         ADJACENT = b.comment("A new chunk must touch the team's land by a side (or be its first chunk in the dimension)").define("adjacentOnly", false);
+        BUFFER = b.comment("Another team (not an ally) cannot claim a chunk closer than this many chunks to a team's land, 0 means no buffer")
+            .defineInRange("bufferChunks", 0, 0, 16);
         RELEASE = b.comment("Seconds a released chunk stays protected and can be kept").defineInRange("releaseSeconds", 30, 0, 3600);
         MAX_LOAD = b.comment("Most generous force loading a team may choose: online (while a member is online) or always")
             .define("maxForceLoadMode", "online", o -> o instanceof String s && Settings.LoadMode.parse(s, null) != null);
@@ -115,6 +117,7 @@ public final class ServerConfig {
             s.disabledDimensions = new LinkedHashSet<>(DISABLED.get());
             s.onlyDimensions = new LinkedHashSet<>(ONLY.get());
             s.adjacentOnly = ADJACENT.get();
+            s.bufferChunks = BUFFER.get();
             s.releaseSeconds = RELEASE.get();
             s.idleUnforceDays = IDLE_UNFORCE.get();
             s.idleUnclaimDays = IDLE_UNCLAIM.get();
@@ -149,7 +152,7 @@ public final class ServerConfig {
     private static List<ModConfigSpec.ConfigValue<?>> all() {
         return List.of(CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, BONUS_MODE, MAX_LOAD, ALLY_MODE,
             PVP_MODE, DISABLED, ONLY, NO_WILD_DIMS, ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS, DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY,
-            LOG_DAYS, FLUIDS, FIRE, PISTONS, HOPPERS, OWNERLESS, LOCKED, IDLE_UNFORCE, IDLE_UNCLAIM);
+            LOG_DAYS, FLUIDS, FIRE, PISTONS, HOPPERS, OWNERLESS, LOCKED, IDLE_UNFORCE, IDLE_UNCLAIM, BUFFER);
     }
 
     /**
@@ -175,6 +178,7 @@ public final class ServerConfig {
         DISABLED.set(List.copyOf(s.disabledDimensions));
         ONLY.set(List.copyOf(s.onlyDimensions));
         ADJACENT.set(s.adjacentOnly);
+        BUFFER.set(s.bufferChunks);
         RELEASE.set(s.releaseSeconds);
         IDLE_UNFORCE.set(s.idleUnforceDays);
         IDLE_UNCLAIM.set(s.idleUnclaimDays);
@@ -210,6 +214,7 @@ public final class ServerConfig {
         m.put("claimsPerMember", CLAIMS_MEMBER);
         m.put("forcePerMember", FORCE_MEMBER);
         m.put("adjacentOnly", ADJACENT);
+        m.put("bufferChunks", BUFFER);
         m.put("ownerlessExplosions", OWNERLESS);
         m.put("pistonsAcrossBorders", PISTONS);
         m.put("fluidsAcrossBorders", FLUIDS);

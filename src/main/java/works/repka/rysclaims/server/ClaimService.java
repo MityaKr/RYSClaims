@@ -67,7 +67,9 @@ public final class ClaimService {
         /** Сервер закрыл командам правку прав или закрепил переключатель. */
         LOCKED,
         /** Игрок или участок не найден. */
-        NOT_FOUND
+        NOT_FOUND,
+        /** Ближе буфера к земле чужой команды (настройка {@code bufferChunks}). */
+        BUFFER
     }
 
     /** Итог действия: сколько сделано, сколько пропущено и почему. */
@@ -318,6 +320,10 @@ public final class ClaimService {
                     r.skip(Skip.LIMIT);
                     continue;
                 }
+                if (!admin && s.bufferChunks > 0 && nearStranger(team, dim, chunk, s.bufferChunks)) {
+                    r.skip(Skip.BUFFER);
+                    continue;
+                }
                 if (adjacent && any && !touches(team, dim, chunk)) {
                     later.add(chunk);
                     continue;
@@ -342,6 +348,24 @@ public final class ClaimService {
             if (actor != null) hooks.landEdited(actor, team, "claim", r.changed.size());
         }
         return r;
+    }
+
+    /**
+     * Есть ли в {@code radius} чанках (квадрат) земля другой команды, кроме союзников (план, раздел 6 «Потом»: буфер «чужим
+     * нельзя занимать ближе N чанков»). Своя земля и земля союза буфера не держат.
+     */
+    boolean nearStranger(UUID team, String dim, long chunk, int radius) {
+        int cx = Chunks.x(chunk), cz = Chunks.z(chunk);
+        java.util.Set<UUID> allies = null;
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                UUID o = data.owner(dim, Chunks.pack(cx + dx, cz + dz));
+                if (o == null || o.equals(team)) continue;
+                if (allies == null) allies = new java.util.HashSet<>(teams.allies(team));
+                if (!allies.contains(o)) return true;
+            }
+        }
+        return false;
     }
 
     /** Освобождает с отсчётом: до его конца чанки защищены, прогружены и входят в лимит. */

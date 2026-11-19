@@ -285,6 +285,7 @@ public final class Commands {
             case RELEASING -> Msg.t("skip.releasing", "being released");
             case LOCKED -> Msg.t("skip.locked", "locked by the server");
             case NOT_FOUND -> Msg.t("skip.not_found", "not found");
+            case BUFFER -> Msg.t("skip.buffer", "too close to another team's land");
         };
     }
 

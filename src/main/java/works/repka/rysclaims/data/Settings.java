@@ -102,6 +102,8 @@ public final class Settings {
     public Set<String> onlyDimensions = new LinkedHashSet<>();
     /** Новый чанк только рядом со своим (по стороне) или первым в измерении. */
     public boolean adjacentOnly = false;
+    /** Чужая команда (не союз) не может занять чанк ближе этого числа чанков к земле команды; 0: без буфера. */
+    public int bufferChunks = 0;
     /** Сколько секунд освобождаемый чанк ещё защищён. */
     public int releaseSeconds = 30;
     /** Простой команды (никто не входил) в днях, после которого снимается прогрузка; 0: никогда (как FTB по умолчанию). */

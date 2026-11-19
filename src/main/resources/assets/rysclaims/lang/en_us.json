@@ -487,6 +487,7 @@
   "rysclaims.set.team": "Team only",
   "rysclaims.set.team_and_allies": "Team and allies",
   "rysclaims.skip.already": "already so",
+  "rysclaims.skip.buffer": "too close to another team's land",
   "rysclaims.skip.dimension": "land cannot be claimed in this dimension",
   "rysclaims.skip.force_limit": "force loading limit",
   "rysclaims.skip.limit": "claim limit",

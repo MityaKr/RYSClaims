@@ -464,6 +464,21 @@ class ClaimServiceTest {
         settings.idleUnclaimDays = 0;
     }
 
+    /** Буфер: чужая команда не занимает ближе N чанков, оператор может, своя земля буфера не держит. */
+    @Test
+    void bufferKeepsStrangersAway() {
+        settings.bufferChunks = 2;
+        service.claim(LEADER, TEAM, OW, one(0, 0), false);
+        var r = service.claim(ALLY, OTHER, OW, one(2, 0), false);
+        assertEquals(0, r.done, "в 2 чанках нельзя");
+        assertEquals(1, r.skipped.get(ClaimService.Skip.BUFFER));
+        assertEquals(1, service.claim(ALLY, OTHER, OW, one(3, 0), false).done, "в 3 чанках можно");
+        assertEquals(1, service.claim(LEADER, TEAM, OW, one(0, -1), false).done, "у своей земли буфера нет");
+        assertEquals(0, service.claim(LEADER, TEAM, OW, one(1, 0), false).done, "буфер держит и в обратную сторону: рядом с чужой");
+        assertEquals(1, service.claim(null, OTHER, OW, one(0, 2), true).done, "оператор может");
+        settings.bufferChunks = 0;
+    }
+
     /** Сниженный лимит без слияния землю не отнимает (перепроверка 18.11, пункт 3). */
     @Test
     void lowerLimitDoesNotRelease() {
