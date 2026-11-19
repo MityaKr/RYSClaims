@@ -114,8 +114,11 @@ public final class Loader {
         removedAtStart = 0;
     }
 
+    /** Строка измерения по ключу: ключи игры одни на измерение, строка строится один раз (разбор логики 19.11, раздел 5, пункт 5). */
+    private static final Map<ResourceKey<Level>, String> IDS = new java.util.concurrent.ConcurrentHashMap<>();
+
     public static String id(ResourceKey<Level> dimension) {
-        return dimension.location().toString();
+        return IDS.computeIfAbsent(dimension, k -> k.location().toString());
     }
 
     public static ResourceKey<Level> key(String dimension) {
