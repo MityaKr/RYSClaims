@@ -118,7 +118,14 @@ public final class ClaimsServer {
             if (ticks % LOG_PRUNE_TICKS == 0) l.prune(s.settings().logDays);
         }
         if (ticks % 200 == 0) Feed.flush(srv);
-        if (ticks % 1200 == 600) s.overLimitTick();
+        if (ticks % 1200 == 600) {
+            s.overLimitTick();
+            // кто в сети, у того простоя нет
+            java.util.Set<java.util.UUID> online = new java.util.HashSet<>();
+            for (ServerPlayer p : srv.getPlayerList().getPlayers()) online.add(s.teams().teamOf(p.getUUID()));
+            for (java.util.UUID t : online) s.seen(t);
+            s.idleTick();
+        }
         if (loaderDirty || ticks % 200 == 0) {
             loaderDirty = false;
             Loader.sync(srv, s);
@@ -148,11 +155,7 @@ public final class ClaimsServer {
     public static void login(ServerPlayer player) {
         ClaimService s = service;
         if (s == null) return;
-        TeamLand land = s.data().land(s.teams().teamOf(player.getUUID()));
-        if (land != null) {
-            land.lastSeen = System.currentTimeMillis();
-            markDirty();
-        }
+        s.seen(s.teams().teamOf(player.getUUID()));
         loaderDirty = true;
         ClaimSync.login(player);
         Membership.login(player);
@@ -212,6 +215,16 @@ public final class ClaimsServer {
         @Override
         public void landEdited(UUID actor, UUID team, String op, int count) {
             Feed.edited(actor, team, op, count);
+        }
+
+        @Override
+        public void idle(UUID team, String kind, int count, int days) {
+            switch (kind) {
+                case "warn" -> Feed.post(team, Msg.t("feed.idle.warn", "Nobody from the team has logged in for a long time: in %s days the land is released (%s chunks). Any login keeps it", days, count), true);
+                case "unforce" -> Feed.post(team, Msg.t("feed.idle.unforce", "Nobody logged in for %s days: force loading is off (%s chunks)", days, count), true);
+                default -> Feed.post(team, Msg.t("feed.idle.unclaim", "Nobody logged in for %s days: the land is being released (%s chunks)", days, count), true);
+            }
+            ClaimsServer.loaderDirty();
         }
 
         @Override

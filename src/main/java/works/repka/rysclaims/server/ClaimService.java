@@ -125,6 +125,9 @@ public final class ClaimService {
 
         /** Неделя сверх лимита после слияния кончилась: лишние чанки пошли на освобождение. */
         default void overLimitReleased(UUID team, int count) {}
+
+        /** Простой команды: {@code kind} warn (неделя до снятия земли), unforce (прогрузка снята), unclaim (земля освобождается). */
+        default void idle(UUID team, String kind, int count, int days) {}
     }
 
     private final ClaimData data;
@@ -944,6 +947,67 @@ public final class ClaimService {
             hooks.overLimitReleased(land.id, total - Math.max(0, over));
             hooks.dirty();
         }
+    }
+
+    /** Сколько дней до снятия земли по простою уходит предупреждение. */
+    public static final int IDLE_WARN_DAYS = 7;
+
+    /**
+     * Раз в минуту: простой команды (план, раздел 6 «Потом»; разбор скептика 18.11, раздел 2.7). Последний вход участника
+     * хранится в {@code lastSeen} (вход и каждая минута в сети); его нет (0), значит отсчёт начинается сейчас. После
+     * {@code idleUnforceDays} снимается прогрузка, после {@code idleUnclaimDays} вся земля освобождается с обычным отсчётом,
+     * за {@link #IDLE_WARN_DAYS} дней до этого в ленту команды уходит предупреждение. Земля FTB без пары в RYSTeams и
+     * земля сервера не трогаются: войти за них некому.
+     */
+    public void idleTick() {
+        Settings s = settings.get();
+        if (s.idleUnforceDays <= 0 && s.idleUnclaimDays <= 0) return;
+        long now = clock.getAsLong();
+        for (TeamLand land : new java.util.ArrayList<>(data.lands().values())) {
+            if (land.claimed() == 0 || land.legacyName != null) continue;
+            if (land.lastSeen <= 0) {
+                land.lastSeen = now;
+                hooks.dirty();
+                continue;
+            }
+            long idle = now - land.lastSeen;
+            long day = 24L * 3600 * 1000;
+            if (s.idleUnforceDays > 0 && idle >= s.idleUnforceDays * day && land.forced() > 0) {
+                int n = 0;
+                for (String dim : data.dimensions()) {
+                    LongList forced = new LongArrayList();
+                    for (Claim c : data.claims(dim).values()) if (c.team().equals(land.id) && c.force()) forced.add(c.pos());
+                    if (!forced.isEmpty()) n += load(null, land.id, dim, forced, false, true).done;
+                }
+                if (n > 0) hooks.idle(land.id, "unforce", n, s.idleUnforceDays);
+            }
+            if (s.idleUnclaimDays <= 0) continue;
+            long unclaimAt = s.idleUnclaimDays * day;
+            if (!land.idleWarned && idle >= Math.max(0, unclaimAt - IDLE_WARN_DAYS * day) && idle < unclaimAt) {
+                land.idleWarned = true;
+                hooks.idle(land.id, "warn", land.claimed(), (int) Math.max(1, (unclaimAt - idle + day - 1) / day));
+                hooks.dirty();
+            }
+            if (idle < unclaimAt) continue;
+            int n = 0;
+            for (String dim : data.dimensions()) {
+                LongList mine = new LongArrayList();
+                for (Claim c : data.claims(dim).values()) if (c.team().equals(land.id) && !c.releasing()) mine.add(c.pos());
+                if (!mine.isEmpty()) n += release(null, land.id, dim, mine, true).done;
+            }
+            land.idleWarned = false;
+            if (n > 0) hooks.idle(land.id, "unclaim", n, s.idleUnclaimDays);
+            hooks.dirty();
+        }
+    }
+
+    /** Участник команды вошёл или в сети: простой сначала. */
+    public void seen(UUID team) {
+        TeamLand land = data.land(team);
+        if (land == null) return;
+        land.lastSeen = clock.getAsLong();
+        if (land.idleWarned) land.idleWarned = false;
+        hooks.dirty();
     }
 
     /** Слияние: вся земля и добавка уходящей команды переходит принимающей. Отмена в течение 30 секунд возвращает. */

@@ -82,6 +82,8 @@ public final class FtbClaims {
             plan.target.put(land.id, to);
             plan.names.putIfAbsent(to, name(team, land.id));
             TeamLand dst = data.landOrCreate(to);
+            // последний вход из FTB: от него считается простой команды
+            dst.lastSeen = Math.max(dst.lastSeen, land.lastLogin);
             if (configured.add(to)) {
                 if (team != null) properties(team, dst);
             } else {

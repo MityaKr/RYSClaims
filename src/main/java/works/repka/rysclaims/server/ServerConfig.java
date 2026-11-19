@@ -17,6 +17,7 @@ public final class ServerConfig {
     public static final ModConfigSpec SPEC;
 
     private static final ModConfigSpec.IntValue CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, LOG_DAYS;
+    private static final ModConfigSpec.IntValue IDLE_UNFORCE, IDLE_UNCLAIM;
     private static final ModConfigSpec.ConfigValue<String> BONUS_MODE, MAX_LOAD, ALLY_MODE, PVP_MODE, OWNERLESS;
     private static final ModConfigSpec.BooleanValue FLUIDS, FIRE, PISTONS, HOPPERS;
     private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED, ONLY, NO_WILD_DIMS, LOCKED;
@@ -47,6 +48,10 @@ public final class ServerConfig {
         RELEASE = b.comment("Seconds a released chunk stays protected and can be kept").defineInRange("releaseSeconds", 30, 0, 3600);
         MAX_LOAD = b.comment("Most generous force loading a team may choose: online (while a member is online) or always")
             .define("maxForceLoadMode", "online", o -> o instanceof String s && Settings.LoadMode.parse(s, null) != null);
+        IDLE_UNFORCE = b.comment("Days without any team member logging in after which the team's force loading is switched off, 0 means never")
+            .defineInRange("idleDaysBeforeUnforce", 0, 0, 3650);
+        IDLE_UNCLAIM = b.comment("Days without any team member logging in after which the team's land is released (a warning goes to the team feed a week before), 0 means never")
+            .defineInRange("idleDaysBeforeUnclaim", 0, 0, 3650);
         b.pop();
 
         b.push("access");
@@ -111,6 +116,8 @@ public final class ServerConfig {
             s.onlyDimensions = new LinkedHashSet<>(ONLY.get());
             s.adjacentOnly = ADJACENT.get();
             s.releaseSeconds = RELEASE.get();
+            s.idleUnforceDays = IDLE_UNFORCE.get();
+            s.idleUnclaimDays = IDLE_UNCLAIM.get();
             s.maxLoad = Settings.LoadMode.parse(MAX_LOAD.get(), Settings.LoadMode.ONLINE);
             s.protection = PROTECTION.get();
             s.allyMode = Settings.AllyMode.parse(ALLY_MODE.get(), Settings.AllyMode.TEAM);
@@ -142,7 +149,7 @@ public final class ServerConfig {
     private static List<ModConfigSpec.ConfigValue<?>> all() {
         return List.of(CLAIMS, FORCE, CLAIMS_MEMBER, FORCE_MEMBER, HARD_CLAIMS, HARD_FORCE, RELEASE, BONUS_MODE, MAX_LOAD, ALLY_MODE,
             PVP_MODE, DISABLED, ONLY, NO_WILD_DIMS, ADJACENT, PROTECTION, NO_WILD, EDIT_RIGHTS, DEF_BUILD, DEF_OPEN, DEF_USE, DEF_ENTITY,
-            LOG_DAYS, FLUIDS, FIRE, PISTONS, HOPPERS, OWNERLESS, LOCKED);
+            LOG_DAYS, FLUIDS, FIRE, PISTONS, HOPPERS, OWNERLESS, LOCKED, IDLE_UNFORCE, IDLE_UNCLAIM);
     }
 
     /**
@@ -169,6 +176,8 @@ public final class ServerConfig {
         ONLY.set(List.copyOf(s.onlyDimensions));
         ADJACENT.set(s.adjacentOnly);
         RELEASE.set(s.releaseSeconds);
+        IDLE_UNFORCE.set(s.idleUnforceDays);
+        IDLE_UNCLAIM.set(s.idleUnclaimDays);
         MAX_LOAD.set(s.maxLoad.key());
         PROTECTION.set(s.protection);
         ALLY_MODE.set(s.allyMode.name().toLowerCase(java.util.Locale.ROOT));
@@ -216,6 +225,8 @@ public final class ServerConfig {
         m.put("entity", DEF_ENTITY);
         m.put("teamsEditRights", EDIT_RIGHTS);
         m.put("logDays", LOG_DAYS);
+        m.put("idleDaysBeforeUnforce", IDLE_UNFORCE);
+        m.put("idleDaysBeforeUnclaim", IDLE_UNCLAIM);
         return m;
     }
 

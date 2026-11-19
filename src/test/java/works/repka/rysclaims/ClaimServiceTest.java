@@ -438,6 +438,32 @@ class ClaimServiceTest {
         assertEquals(8, service.releasing(TEAM)[0], "через неделю лишнее освобождается с отсчётом");
     }
 
+    /** Простой команды: прогрузка снимается, за неделю предупреждение, потом земля освобождается; вход сбрасывает. */
+    @Test
+    void idleTeamLosesLand() {
+        long day = 24L * 3600 * 1000;
+        settings.idleUnforceDays = 10;
+        settings.idleUnclaimDays = 30;
+        service.claim(LEADER, TEAM, OW, Chunks.square(0, 0, 1), false);
+        service.load(LEADER, TEAM, OW, one(0, 0), true, false);
+        service.idleTick(); // первый проход: отсчёт с сейчас
+        assertTrue(data.land(TEAM).lastSeen > 0);
+        now += 11 * day;
+        service.idleTick();
+        assertEquals(0, data.forced(TEAM), "через 10 дней прогрузка снята");
+        assertFalse(data.land(TEAM).idleWarned);
+        now += 13 * day; // 24-й день: за неделю до снятия
+        service.idleTick();
+        assertTrue(data.land(TEAM).idleWarned, "предупреждение за неделю");
+        assertEquals(0, service.releasing(TEAM)[0]);
+        service.seen(TEAM);
+        assertFalse(data.land(TEAM).idleWarned, "вход сбрасывает");
+        now += 31 * day;
+        service.idleTick();
+        assertEquals(9, service.releasing(TEAM)[0], "через 30 дней без входа земля освобождается");
+        settings.idleUnclaimDays = 0;
+    }
+
     /** Сниженный лимит без слияния землю не отнимает (перепроверка 18.11, пункт 3). */
     @Test
     void lowerLimitDoesNotRelease() {

@@ -23,6 +23,9 @@ public final class FtbSettings {
         s.bonusMode = Settings.BonusMode.parse(Snbt.string(claiming, "party_limit_mode", s.bonusMode.key()), s.bonusMode);
         s.hardClaims = Snbt.integer(claiming, "hard_team_claim_limit", s.hardClaims);
         s.hardForce = Snbt.integer(loading, "hard_team_force_limit", s.hardForce);
+        s.idleUnforceDays = (int) Math.ceil(number(loading, "max_idle_days_before_unforce", s.idleUnforceDays));
+        s.idleUnclaimDays = (int) Math.ceil(number(Snbt.object(cfg, "team_prop_defaults"), "max_idle_days_before_unclaim",
+            number(claiming, "max_idle_days_before_unclaim", s.idleUnclaimDays)));
         for (JsonElement e : Snbt.array(claiming, "claim_dimension_blacklist")) s.disabledDimensions.add(e.getAsString());
         for (JsonElement e : Snbt.array(claiming, "claim_dimension_whitelist")) s.onlyDimensions.add(e.getAsString());
         // FTB «always» прогружает и без игроков; «default» и «never» держат прогрузку, пока участник в сети
@@ -82,5 +85,12 @@ public final class FtbSettings {
     static void setFrom(Rights r, Rights.Action a, @Nullable String mode) {
         Rights.Preset p = preset(mode);
         if (p != null) r.set(a, p);
+    }
+
+    /** Число с дробью из SNBT ({@code 0.0d}); нет ключа: запасное. */
+    static double number(@org.jetbrains.annotations.Nullable JsonObject o, String key, double fallback) {
+        com.google.gson.JsonElement e = o == null ? null : o.get(key);
+        if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) return fallback;
+        return Math.max(0, e.getAsDouble());
     }
 }

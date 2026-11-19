@@ -104,6 +104,10 @@ public final class Settings {
     public boolean adjacentOnly = false;
     /** Сколько секунд освобождаемый чанк ещё защищён. */
     public int releaseSeconds = 30;
+    /** Простой команды (никто не входил) в днях, после которого снимается прогрузка; 0: никогда (как FTB по умолчанию). */
+    public int idleUnforceDays = 0;
+    /** Простой в днях, после которого земля команды освобождается с обычным отсчётом; за неделю строка в ленту. 0: никогда. */
+    public int idleUnclaimDays = 0;
     /** Самая щедрая прогрузка, которую может выбрать команда. */
     public LoadMode maxLoad = LoadMode.ONLINE;
 

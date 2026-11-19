@@ -64,6 +64,8 @@ public final class TeamLand {
     public int bonusClaims, bonusForce;
     /** Когда участник команды был в сети последний раз, мс от эпохи. */
     public long lastSeen;
+    /** Предупреждение о снятии земли по простою уже ушло в ленту (сбрасывается входом участника). */
+    public boolean idleWarned;
     /** Режим прогрузки, который выбрала команда в пределах сервера. */
     public Settings.LoadMode loadMode = Settings.LoadMode.ONLINE;
     /** Часы после выхода для режима «и ещё N часов» (0.2). */
@@ -130,6 +132,7 @@ public final class TeamLand {
         t.putInt("bonusClaims", bonusClaims);
         t.putInt("bonusForce", bonusForce);
         t.putLong("lastSeen", lastSeen);
+        if (idleWarned) t.putBoolean("idleWarned", true);
         t.putString("loadMode", loadMode.key());
         t.putInt("loadHours", loadHours);
         t.putString("visibility", visibility.key());
@@ -174,6 +177,7 @@ public final class TeamLand {
         land.bonusClaims = t.getInt("bonusClaims");
         land.bonusForce = t.getInt("bonusForce");
         land.lastSeen = t.getLong("lastSeen");
+        land.idleWarned = t.getBoolean("idleWarned");
         land.loadMode = Settings.LoadMode.parse(t.getString("loadMode"), Settings.LoadMode.ONLINE);
         land.loadHours = t.getInt("loadHours");
         land.visibility = Visibility.parse(t.getString("visibility"), Visibility.ALL);
