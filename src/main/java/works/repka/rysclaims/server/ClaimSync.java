@@ -489,7 +489,7 @@ public final class ClaimSync {
                 if (e.kind() == ClaimsNet.LAND_LOG_FEED) s.setLog(team, e.on(), land.logToast);
                 else s.setLog(team, land.logFeed, e.on());
                 r.done = 1;
-                ClaimsNet.send(player, logPage(s, player.server, id));
+                sendLog(player);
             }
             case ClaimsNet.LAND_RENAME -> {
                 if (s.plot(team, e.id()) == null) r.skipped.put(ClaimService.Skip.NOT_FOUND, 1);
@@ -520,21 +520,34 @@ public final class ClaimSync {
         long now = System.currentTimeMillis();
         if (now - v.lastLog < 1000) return;
         v.lastLog = now;
-        ClaimsNet.send(player, logPage(ClaimsServer.service(), player.server, player.getUUID()));
+        sendLog(player);
     }
 
-    static ClaimsNet.LogPage logPage(ClaimService s, MinecraftServer server, UUID player) {
+    /** Страница журнала окну: файл читает поток журнала, страница собирается и уходит в главном потоке. */
+    private static void sendLog(ServerPlayer player) {
+        DenyLog log = ClaimsServer.log();
+        if (log == null) {
+            ClaimsNet.send(player, logPage(ClaimsServer.service(), player.server, player.getUUID(), List.of()));
+            return;
+        }
+        UUID team = ClaimsServer.service().teams().teamOf(player.getUUID());
+        log.recent(team, ClaimsNet.LogPage.MAX, player.server, entries -> {
+            if (!ClaimsServer.running() || player.hasDisconnected()) return;
+            ClaimService s = ClaimsServer.service();
+            if (!s.teams().teamOf(player.getUUID()).equals(team)) return;
+            ClaimsNet.send(player, logPage(s, player.server, player.getUUID(), entries));
+        });
+    }
+
+    static ClaimsNet.LogPage logPage(ClaimService s, MinecraftServer server, UUID player, List<DenyLog.Entry> entries) {
         UUID team = s.teams().teamOf(player);
         TeamLand land = s.data().land(team);
-        DenyLog log = ClaimsServer.log();
         List<ClaimsNet.LogLine> lines = new ArrayList<>();
-        if (log != null) {
-            for (DenyLog.Entry e : log.recent(team, ClaimsNet.LogPage.MAX)) {
-                var plot = s.plotAt(e.dim(), works.repka.rysclaims.data.Chunks.pack(e.x() >> 4, e.z() >> 4));
-                String plotName = plot == null || !s.data().get(e.dim(), works.repka.rysclaims.data.Chunks.pack(e.x() >> 4, e.z() >> 4)).team().equals(team) ? ""
-                    : plot.name.isEmpty() ? "#" + plot.id : plot.name;
-                lines.add(new ClaimsNet.LogLine(e.last(), e.first(), e.count(), e.name(), e.machine(), e.reason(), e.dim(), e.x(), e.y(), e.z(), plotName));
-            }
+        for (DenyLog.Entry e : entries) {
+            var plot = s.plotAt(e.dim(), works.repka.rysclaims.data.Chunks.pack(e.x() >> 4, e.z() >> 4));
+            String plotName = plot == null || !s.data().get(e.dim(), works.repka.rysclaims.data.Chunks.pack(e.x() >> 4, e.z() >> 4)).team().equals(team) ? ""
+                : plot.name.isEmpty() ? "#" + plot.id : plot.name;
+            lines.add(new ClaimsNet.LogLine(e.last(), e.first(), e.count(), e.name(), e.machine(), e.reason(), e.dim(), e.x(), e.y(), e.z(), plotName));
         }
         boolean edit = s.editsRights(player, team, s.bypass(player));
         return new ClaimsNet.LogPage(land == null || land.logFeed, land != null && land.logToast, edit, s.settings().logDays, lines);

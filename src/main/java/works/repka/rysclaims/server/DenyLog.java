@@ -156,6 +156,21 @@ public final class DenyLog {
         return out.size() > max ? new ArrayList<>(out.subList(0, max)) : out;
     }
 
+    /**
+     * То же без чтения файла в главном потоке (разбор логики 19.11, раздел 5, пункт 7): память снимается здесь, хвост файла
+     * читается в потоке журнала (после уже поставленных записей), итог отдаётся {@code done} через {@code main}.
+     */
+    public void recent(UUID team, int max, Executor main, java.util.function.Consumer<List<Entry>> done) {
+        List<Entry> mem = pending(team);
+        writer.execute(() -> {
+            List<Entry> out = new ArrayList<>(readTail(team));
+            out.addAll(mem);
+            out.sort(Comparator.comparingLong(Entry::last).reversed());
+            List<Entry> cut = out.size() > max ? new ArrayList<>(out.subList(0, max)) : out;
+            main.execute(() -> done.accept(cut));
+        });
+    }
+
     private List<Entry> readTail(UUID team) {
         Path f = file(team);
         if (!Files.isRegularFile(f)) return List.of();
