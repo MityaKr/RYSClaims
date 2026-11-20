@@ -27,8 +27,9 @@ public final class Borders {
     public static boolean fluid(BlockGetter level, BlockPos from, BlockPos to) {
         if (((from.getX() ^ to.getX()) >> 4) == 0 && ((from.getZ() ^ to.getZ()) >> 4) == 0) return true;
         ClaimService s = service(level);
-        if (s == null) return true;
-        return cross(s, (Level) level, from, to, s.settings().fluidsCross);
+        // граница открыта (по умолчанию): ни измерения, ни перевода координат, ни таблицы земли
+        if (s == null || s.settings().fluidsCross) return true;
+        return cross(s, (Level) level, from, to, false);
     }
 
     /** Огонь из {@code from} в {@code to}: на землю другой команды только с настройкой сервера. */

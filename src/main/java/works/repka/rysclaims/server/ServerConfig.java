@@ -45,7 +45,7 @@ public final class ServerConfig {
         ONLY = b.comment("If not empty, land can be claimed only in these dimensions")
             .defineListAllowEmpty("onlyDimensions", List.of(), () -> "mod:dimension", o -> o instanceof String);
         ADJACENT = b.comment("A new chunk must touch the team's land by a side (or be its first chunk in the dimension)").define("adjacentOnly", false);
-        PLOT_DEALS = b.comment("Teams may give or lease plots to other teams (/claims plot give, lend)").define("plotDeals", false);
+        PLOT_DEALS = b.comment("Teams may give or lease plots to other teams (/claims plot give, lend)").define("plotDeals", true);
         BUFFER = b.comment("Another team (not an ally) cannot claim a chunk closer than this many chunks to a team's land, 0 means no buffer")
             .defineInRange("bufferChunks", 0, 0, 16);
         RELEASE = b.comment("Seconds a released chunk stays protected and can be kept").defineInRange("releaseSeconds", 30, 0, 3600);
@@ -73,7 +73,7 @@ public final class ServerConfig {
         b.pop();
 
         b.push("borders");
-        FLUIDS = b.comment("Water and lava may flow onto another team's land (from other land or unclaimed land)").define("fluidsAcrossBorders", false);
+        FLUIDS = b.comment("Water and lava may flow onto another team's land (from other land or unclaimed land)").define("fluidsAcrossBorders", true);
         FIRE = b.comment("Fire and lightning fire may spread onto another team's land").define("fireAcrossBorders", false);
         PISTONS = b.comment("Pistons may move blocks across the border of land, falling blocks may land across it").define("pistonsAcrossBorders", false);
         HOPPERS = b.comment("Hoppers, hopper minecarts, droppers and dispensers may work across the border of land").define("hoppersAcrossBorders", false);

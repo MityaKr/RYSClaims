@@ -104,8 +104,8 @@ public final class Settings {
     public boolean adjacentOnly = false;
     /** Чужая команда (не союз) не может занять чанк ближе этого числа чанков к земле команды; 0: без буфера. */
     public int bufferChunks = 0;
-    /** Передача и аренда участков другим командам ({@code /claims plot give|lend}); по умолчанию выключено. */
-    public boolean plotDeals = false;
+    /** Передача и аренда участков другим командам ({@code /claims plot give|lend}); по умолчанию включено (автор 20.11). */
+    public boolean plotDeals = true;
     /** Сколько секунд освобождаемый чанк ещё защищён. */
     public int releaseSeconds = 30;
     /** Простой команды (никто не входил) в днях, после которого снимается прогрузка; 0: никогда (как FTB по умолчанию). */
@@ -127,8 +127,11 @@ public final class Settings {
     /** Переключатели, закреплённые сервером: команда их видит, но не меняет (план, раздел 6). */
     public java.util.EnumMap<TeamLand.Flag, Boolean> lockedFlags = new java.util.EnumMap<>(TeamLand.Flag.class);
     // ---- через границу земли ----
-    /** Вода и лава текут с чужой или свободной земли на землю команды. */
-    public boolean fluidsCross = false;
+    /**
+     * Вода и лава текут с чужой или свободной земли на землю команды. По умолчанию текут, как в FTB Chunks RepYS (автор 20.11):
+     * при открытой границе перехват растекания отвечает сразу, без поиска в таблице земли.
+     */
+    public boolean fluidsCross = true;
     /** Огонь и молния переходят на землю другой команды. */
     public boolean fireCross = false;
     /** Поршни двигают блоки через границу земли (и падающие блоки ложатся через неё). */

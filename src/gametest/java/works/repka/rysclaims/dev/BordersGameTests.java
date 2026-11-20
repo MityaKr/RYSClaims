@@ -67,7 +67,8 @@ public final class BordersGameTests {
     }
 
     /**
-     * Вода со свободной земли не течёт на землю команды; по своей земле через границу чанков течёт. Спрашиваем ту же
+     * По умолчанию (автор 20.11) вода течёт через границу земли. С закрытой границей ({@code fluidsAcrossBorders = false})
+     * вода со свободной земли не течёт на землю команды; по своей земле через границу чанков течёт. Спрашиваем ту же
      * {@code FlowingFluid.canSpreadTo}, что зовёт растекание: так проверяется сам перехват, без растекания в далёких
      * чанках (вода в нетикающем чанке подвешивает остановку сервера GameTest).
      */
@@ -89,7 +90,13 @@ public final class BordersGameTests {
             var water = (net.minecraft.world.level.material.FlowingFluid) net.minecraft.world.level.material.Fluids.WATER;
             BlockState w = Blocks.WATER.defaultBlockState(), air = Blocks.AIR.defaultBlockState();
             var empty = net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState();
+            String was = works.repka.rysclaims.server.ServerConfig.values().getOrDefault("fluidsAcrossBorders", "true");
+            works.repka.rysclaims.server.ServerConfig.set("fluidsAcrossBorders", "true");
+            boolean openBorder = (boolean) m.invoke(water, level, source, w, net.minecraft.core.Direction.EAST, foreign, air, empty, water.getFlowing());
+            works.repka.rysclaims.server.ServerConfig.set("fluidsAcrossBorders", "false");
             boolean intoForeign = (boolean) m.invoke(water, level, source, w, net.minecraft.core.Direction.EAST, foreign, air, empty, water.getFlowing());
+            works.repka.rysclaims.server.ServerConfig.set("fluidsAcrossBorders", was);
+            if (!openBorder) h.fail("граница открыта, а вода на землю команды не течёт");
             boolean inWild = (boolean) m.invoke(water, level, source, w, net.minecraft.core.Direction.WEST, source.west(), air, empty, water.getFlowing());
             boolean ownBorder = (boolean) m.invoke(water, level, ownEdge, w, net.minecraft.core.Direction.EAST, ownNext, air, empty, water.getFlowing());
             if (!inWild) h.fail("вода не течёт даже по свободной земле: тест ничего не проверяет");
