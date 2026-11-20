@@ -51,10 +51,13 @@ public final class MigrateGameTests {
         live.clear();
         Settings before = ServerConfig.snapshot();
         try {
-            Path world = server.getWorldPath(LevelResource.ROOT);
+            // своя папка мира на прогон: отметка «сделано» ядра лежит в <мир>/rys и пережила бы остановку сервера,
+            // а второй прогон в том же мире получил бы «пропущен, уже сделан» вместо переноса
+            Path game = server.getServerDirectory();
+            Path world = server.getWorldPath(LevelResource.ROOT).normalize().resolve("rysclaims-test").resolve("migrate-" + System.currentTimeMillis());
             copy(Path.of(System.getProperty("rysclaims.samples")).resolve("world"), world);
 
-            Migrations.Outcome o = Migrations.runManual(ClaimsStep.ID, server);
+            Migrations.Outcome o = Migrations.runManual(ClaimsStep.ID, game, world, server);
             if (o.status() != Migrations.Status.DONE) h.fail("шаг: " + o);
             if (live.total() != 9) h.fail("перенесено " + live.total() + " чанков вместо 9");
 
@@ -75,7 +78,7 @@ public final class MigrateGameTests {
             // откат после правки земли отказан
             UUID team = live.lands().keySet().iterator().next();
             s.claim(null, team, "minecraft:overworld", LongArrayList.of(works.repka.rysclaims.data.Chunks.pack(500, 500)), true);
-            Migrations.Outcome refused = Migrations.undo(ClaimsStep.ID, server);
+            Migrations.Outcome refused = Migrations.undo(ClaimsStep.ID, game, world, server);
             if (refused.status() != Migrations.Status.FAILED) h.fail("откат после правки прошёл: " + refused);
             s.release(null, team, "minecraft:overworld", LongArrayList.of(works.repka.rysclaims.data.Chunks.pack(500, 500)), true);
         } finally {

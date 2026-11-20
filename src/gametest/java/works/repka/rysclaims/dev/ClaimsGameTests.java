@@ -92,8 +92,11 @@ public final class ClaimsGameTests {
                 check(h, s.releasing(team)[0] == 9, "отсчёт не идёт");
                 run(level, src, "claims keep");
                 check(h, s.releasing(team)[0] == 0, "keep не отменил освобождение");
-                // убрать за собой: оператор освобождает сразу после отсчёта не ждёт, данные мира теста выбрасываются
-                s.release(null, team, dim, Chunks.square(3000 >> 4, 3000 >> 4, 1), true);
+                // убрать за собой сразу: release идёт с отсчётом, и земля пережила бы остановку сервера в rysclaims.dat;
+                // следующий прогон в том же мире получил бы «чужая команда» вместо 9 чанков
+                for (long chunk : Chunks.square(3000 >> 4, 3000 >> 4, 1)) s.data().remove(dim, chunk);
+                check(h, s.data().claimed(team) == 0, "земля теста не убрана: " + s.data().claimed(team));
+                Loader.sync(level.getServer(), s);
             })
             .thenSucceed();
     }

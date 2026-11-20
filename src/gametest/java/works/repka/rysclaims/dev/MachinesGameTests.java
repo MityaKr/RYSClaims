@@ -97,10 +97,12 @@ public final class MachinesGameTests {
         ServerLevel level = h.getLevel();
         BlockPos floor = base(1).offset(8, 1, 8);
         UUID owner = UUID.randomUUID();
+        BlockPos target = floor.above();
         claim(level, owner, floor);
         try {
+            // место вне площадки теста живёт в мире между запусками: доска прошлого прогона не должна сойти за установку
             level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
-            BlockPos target = floor.above();
+            level.setBlock(target, Blocks.AIR.defaultBlockState(), 3);
             FakePlayer shared = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "[Formation]"));
             place(level, shared, floor);
             if (!level.getBlockState(target).isAir()) h.fail("машина с чужим профилем поставила блок мимо события");
@@ -108,6 +110,8 @@ public final class MachinesGameTests {
             place(level, mine, floor);
             if (!level.getBlockState(target).is(Blocks.OAK_PLANKS)) h.fail("машина с профилем хозяина не поставила блок");
         } finally {
+            level.setBlock(target, Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(floor, Blocks.AIR.defaultBlockState(), 3);
             free(level, floor);
         }
         done(h);
@@ -130,6 +134,8 @@ public final class MachinesGameTests {
             level.setBlock(machine, Blocks.FURNACE.defaultBlockState(), 3);
             BlockEntity be = level.getBlockEntity(machine);
             if (be == null) h.fail("нет блок-сущности печи");
+            // печь с тикером загрузила класс обёртки тика: перехват mixin/BlockEntityTickMixin обязан в нём стоять
+            if (!tickHooked()) h.fail("перехват тика блок-сущности (BlockEntityTickMixin) не встал");
             FakePlayer fake = FakePlayerFactory.getMinecraft(level);
             if (level.mayInteract(fake, ownNext)) h.fail("без тика машины общий фейк прошёл на землю команды");
             BlockEntity prev = Machines.ticking(be);
@@ -149,6 +155,18 @@ public final class MachinesGameTests {
             free(level, machine, ownNext, foreign);
         }
         done(h);
+    }
+
+    /** Обработчик {@code rysclaims$machine} влит в {@code LevelChunk$BoundTickingBlockEntity} (Mixin переименовывает его с приставкой). */
+    private static boolean tickHooked() {
+        try {
+            for (Method m : Class.forName("net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity").getDeclaredMethods()) {
+                if (m.getName().contains("rysclaims$machine")) return true;
+            }
+            return false;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 
     private static void place(ServerLevel level, FakePlayer player, BlockPos floor) {
