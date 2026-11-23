@@ -44,7 +44,7 @@ public final class ApplyWatch implements IExtension {
                 ex.select(env);
             }
         } catch (RuntimeException | LinkageError e) {
-            org.slf4j.LoggerFactory.getLogger("rysclaims").warn("[rysclaims] учёт связок не поставлен: {}", e.toString());
+            org.slf4j.LoggerFactory.getLogger("rysclaims").warn("[rysclaims] link accounting not installed: {}", e.toString());
         }
     }
 

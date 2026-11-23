@@ -133,7 +133,7 @@ public final class Protection {
                 // другой CBC: событие не трогаем
             }
         });
-        RYSClaims.LOG.info("RYSClaims: защита от снарядов Create Big Cannons включена");
+        RYSClaims.LOG.info("RYSClaims: Create Big Cannons projectile protection enabled");
     }
 
     /** Снаряд без хозяина ломает блок: ничья земля всегда, земля команды только при настройке «всегда». */

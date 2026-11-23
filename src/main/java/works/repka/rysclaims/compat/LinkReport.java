@@ -16,11 +16,11 @@ public final class LinkReport {
         if (last == null) {
             Map<Links.Link, Supplier<String>> extra = Map.of(
                 Links.Link.BOTANIA, LinkReport::botania,
-                Links.Link.SABLE, () -> SableLand.available() ? null : "компаньон Sable не найден");
+                Links.Link.SABLE, () -> SableLand.available() ? null : "Sable companion not found");
             last = Links.line(Links.check(id -> ModList.get().isLoaded(id), RYSClaims.class.getClassLoader(), extra));
         }
         RYSClaims.LOG.info(last);
-        if (RYSClaims.LOG.isDebugEnabled()) RYSClaims.LOG.debug("[rysclaims] связки, обработчики без места вызова: {}", Links.missing());
+        if (RYSClaims.LOG.isDebugEnabled()) RYSClaims.LOG.debug("[rysclaims] links, handlers without a call site: {}", Links.missing());
     }
 
     /** Вспышка маны Botania судится по {@code getBurstSourceBlockPos()} (Botania Revived и старая Botania). */
@@ -33,6 +33,6 @@ public final class LinkReport {
                 // следующее имя
             }
         }
-        return "цель не найдена";
+        return "target not found";
     }
 }

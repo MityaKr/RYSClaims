@@ -130,7 +130,7 @@ public final class DenyLog {
         Map<UUID, List<String>> byTeam = new LinkedHashMap<>();
         pending.forEach((k, p) -> byTeam.computeIfAbsent(k.team, t -> new ArrayList<>()).add(entry(k, p).json()));
         pending.clear();
-        if (lost > 0) RYSClaims.LOG.warn("RYSClaims: журнал отказов переполнен, не записано {}", lost);
+        if (lost > 0) RYSClaims.LOG.warn("RYSClaims: deny log overflowed, {} entries not written", lost);
         lost = 0;
         writer.execute(() -> byTeam.forEach(this::append));
     }
@@ -140,7 +140,7 @@ public final class DenyLog {
             Files.createDirectories(dir);
             Files.write(file(team), lines, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
-            RYSClaims.LOG.warn("RYSClaims: журнал отказов {} не записан: {}", team, e.toString());
+            RYSClaims.LOG.warn("RYSClaims: deny log {} not written: {}", team, e.toString());
         }
     }
 
@@ -202,7 +202,7 @@ public final class DenyLog {
             try (Stream<Path> files = Files.list(dir)) {
                 for (Path f : (Iterable<Path>) files.filter(p -> p.toString().endsWith(".jsonl"))::iterator) pruneFile(f, border);
             } catch (IOException e) {
-                RYSClaims.LOG.warn("RYSClaims: чистка журнала отказов: {}", e.toString());
+                RYSClaims.LOG.warn("RYSClaims: deny log cleanup: {}", e.toString());
             }
         });
     }

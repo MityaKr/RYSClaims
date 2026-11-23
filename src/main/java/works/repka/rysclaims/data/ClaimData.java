@@ -444,7 +444,7 @@ public final class ClaimData {
     /** Читает файл. Версия новее известной это ошибка: старый мод не должен затереть новый формат. */
     public static ClaimData load(CompoundTag tag, Rights defaults) {
         int v = tag.getInt("v");
-        if (v > VERSION) throw new IllegalStateException("rysclaims.dat версии " + v + " новее мода (" + VERSION + ")");
+        if (v > VERSION) throw new IllegalStateException("rysclaims.dat version " + v + " is newer than the mod (" + VERSION + ")");
         ClaimData data = new ClaimData(defaults);
         data.edits = tag.getLong("edits");
         CompoundTag teams = tag.getCompound("teams");

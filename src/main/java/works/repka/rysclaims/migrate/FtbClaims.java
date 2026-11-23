@@ -63,7 +63,7 @@ public final class FtbClaims {
         Plan plan = new Plan(data, s);
         Migrations.Report r = plan.report;
         Set<UUID> knownSet = new HashSet<>(known);
-        for (String e : w.errors) r.partial("файл не прочитался: " + e);
+        for (String e : w.errors) r.partial(Say.t("file_unread", "file could not be read: %s", e));
 
         // личные добавки: в личных файлах игроков
         for (FtbWorld.Land land : w.lands.values()) {
@@ -87,35 +87,35 @@ public final class FtbClaims {
             if (configured.add(to)) {
                 if (team != null) properties(team, dst);
             } else {
-                r.line("земля команды FTB " + name(team, land.id) + " добавлена к уже перенесённой; права взяты у первой");
+                r.line(Say.t("merged", "land of FTB team %s was added to the one already migrated; rights taken from the first", name(team, land.id)));
             }
             // союзники FTB это игроки: становятся доверенными, доступ не теряется
             if (team != null) {
                 for (UUID ally : team.allies()) {
                     if (dst.trusted.add(ally)) r.count("trusted", 1);
                     if (!teams.teamOf(ally).equals(ally)) {
-                        r.line("доверенный " + ally + " состоит в команде RYSTeams: можно заменить союзом команд");
+                        r.line(Say.t("trusted_in_team", "trusted player %s is in an RYSTeams team: can be replaced with a team alliance", ally));
                     }
                 }
             }
             int expiring = 0;
             for (Map.Entry<String, List<FtbWorld.Chunk>> e : land.chunks.entrySet()) {
                 String dim = e.getKey();
-                if (!s.claimable(dim)) r.line(name(team, land.id) + ": земля в " + dim + " перенесена, хотя там приват закрыт: её не отнимаем");
+                if (!s.claimable(dim)) r.line(Say.t("closed_dim", "%s: land in %s was migrated although claiming is closed there: not taking it away", name(team, land.id), dim));
                 for (FtbWorld.Chunk c : e.getValue()) {
                     long pos = Chunks.pack(c.x(), c.z());
                     Claim claim = data.put(dim, pos, to, null, c.time());
                     if (claim == null) {
                         UUID owner = data.owner(dim, pos);
-                        plan.mismatches.add("MISMATCH " + dim + " " + Chunks.text(pos) + ": занят дважды (" + land.id + " и " + owner + ")");
+                        plan.mismatches.add("MISMATCH " + dim + " " + Chunks.text(pos) + ": claimed twice (" + land.id + " and " + owner + ")");
                         continue;
                     }
                     if (c.forceLoaded() != 0) data.setForce(claim, true);
                     if (c.expiry() != 0) expiring++;
                 }
             }
-            if (expiring > 0) r.line(name(team, land.id) + ": у " + expiring + " чанков был срок FTB; срок теперь задаёт режим сервера");
-            if (land.preventedAccess > 0) r.line(name(team, land.id) + ": записей журнала FTB " + land.preventedAccess + " не перенесено (журнал придёт в 0.2)");
+            if (expiring > 0) r.line(Say.t("expiring", "%s: %s chunks had an FTB expiry; the server mode now sets the expiry", name(team, land.id), expiring));
+            if (land.preventedAccess > 0) r.line(Say.t("journal", "%s: %s FTB journal entries were not migrated", name(team, land.id), land.preventedAccess));
         }
 
         // лимиты: не меньше действующих в FTB и не меньше занятого
@@ -136,18 +136,18 @@ public final class FtbClaims {
             int needClaims = Math.max(f[0], f[2]), needForce = Math.max(f[1], f[3]);
             if (lim.claims < needClaims) {
                 land.bonusClaims += needClaims - lim.claims;
-                r.line(label(plan, team) + ": добавка команде +" + (needClaims - lim.claims) + " чанков, чтобы лимит был не меньше FTB");
+                r.line(Say.t("bonus_claims", "%s: team bonus +%s chunks so the limit is not below FTB", label(plan, team), needClaims - lim.claims));
             }
             if (lim.force < needForce) {
                 land.bonusForce += needForce - lim.force;
-                r.line(label(plan, team) + ": добавка команде +" + (needForce - lim.force) + " прогрузки, чтобы лимит был не меньше FTB");
+                r.line(Say.t("bonus_force", "%s: team bonus +%s force-loaded chunks so the limit is not below FTB", label(plan, team), needForce - lim.force));
             }
             Limits after = Limits.of(s, land, members(teams, team), teams.leader(team), data::bonus);
             int claimed = data.claimed(team), forced = data.forced(team);
-            r.line(label(plan, team) + ": чанков " + f[0] + " → " + claimed + ", прогружено " + f[1] + " → " + forced
-                + ", лимиты FTB " + f[2] + "/" + f[3] + " → " + after.claims + "/" + after.force);
+            r.line(Say.t("totals", "%s: chunks %s → %s, force-loaded %s → %s, FTB limits %s/%s → %s/%s", label(plan, team), f[0], claimed, f[1], forced,
+                f[2], f[3], after.claims, after.force));
             if (claimed != f[0] || forced != f[1]) {
-                plan.mismatches.add("MISMATCH " + label(plan, team) + ": чанков FTB " + f[0] + ", стало " + claimed + "; прогружено FTB " + f[1] + ", стало " + forced);
+                plan.mismatches.add("MISMATCH " + label(plan, team) + ": FTB chunks " + f[0] + ", now " + claimed + "; FTB force-loaded " + f[1] + ", now " + forced);
             }
             r.count("teams", 1);
         }
@@ -164,7 +164,7 @@ public final class FtbClaims {
         Migrations.Report r = plan.report;
         if (team == null) {
             legacy(plan.data, id, id.toString().substring(0, 8), "ftb");
-            r.skipped("земля " + id, "нет файла команды FTB, осталась за старым UUID");
+            r.skipped(Say.t("land_of", "land %s", id), Say.t("no_team_file", "no FTB team file, kept under the old UUID"));
             return id;
         }
         switch (team.type) {
@@ -173,7 +173,7 @@ public final class FtbClaims {
             }
             case "server" -> {
                 legacy(plan.data, id, team.name, "ftb-server");
-                r.line("земля серверной команды FTB " + team.name + " осталась за ней (" + id + ")");
+                r.line(Say.t("server_team", "land of FTB server team %s stayed with it (%s)", team.name, id));
                 return id;
             }
             default -> {
@@ -185,14 +185,14 @@ public final class FtbClaims {
                 UUID owner = team.owner != null ? team.owner : members.isEmpty() ? null : members.get(0);
                 if (allPlaced && owner != null) {
                     UUID to = teams.teamOf(owner);
-                    r.line("земля команды FTB " + team.name + " ушла команде RYSTeams владельца (" + to + ")");
+                    r.line(Say.t("moved_to_team", "land of FTB team %s moved to the owner's RYSTeams team (%s)", team.name, to));
                     return to;
                 }
                 legacy(plan.data, id, team.name, "ftb");
                 TeamLand land = plan.data.landOrCreate(id);
                 land.legacyMembers.addAll(members);
                 land.legacyOwner = owner;
-                r.skipped("команда FTB " + team.name, "пары в RYSTeams нет, земля осталась за старым UUID и защищена; её участники остались своими, управлять ею может только оператор");
+                r.skipped(Say.t("ftb_team", "FTB team %s", team.name), Say.t("no_pair", "no RYSTeams counterpart; the land stayed under the old UUID and is protected; its members remain its own, only an operator can manage it"));
                 return id;
             }
         }

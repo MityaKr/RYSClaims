@@ -50,9 +50,9 @@ class LinksTest {
         List<Links.State> s = Links.check(id -> id.equals("oritech") || id.equals("botania"), getClass().getClassLoader(),
             Map.of(Links.Link.BOTANIA, () -> null));
         String line = Links.line(s);
-        assertTrue(line.startsWith("[rysclaims] связки: встали Botania; не встали "), line);
-        assertTrue(line.contains("Oritech (цель не найдена)"), line);
-        assertTrue(line.contains("Create (мод не найден)"), line);
-        assertTrue(line.endsWith("; выключены Cyclic"), line);
+        assertTrue(line.startsWith("[rysclaims] links: applied Botania; not applied "), line);
+        assertTrue(line.contains("Oritech (target not found)"), line);
+        assertTrue(line.contains("Create (mod not found)"), line);
+        assertTrue(line.endsWith("; disabled Cyclic"), line);
     }
 }

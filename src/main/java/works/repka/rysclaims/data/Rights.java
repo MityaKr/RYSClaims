@@ -129,7 +129,7 @@ public final class Rights {
             for (String role : TEAM_ROLES) if (on || !LEADER.equals(role)) setOne(s, role, on);
             return;
         }
-        if (!COLUMNS.contains(column)) throw new IllegalArgumentException("нет такого столбца: " + column);
+        if (!COLUMNS.contains(column)) throw new IllegalArgumentException("no such column: " + column);
         if (LEADER.equals(column) && !on) return;
         setOne(s, column, on);
     }

@@ -47,7 +47,7 @@ public final class ClaimsServer {
         log.prune(ServerConfig.snapshot().logDays);
         int removed = Loader.takeRemovedAtStart();
         int changed = Loader.sync(s, service);
-        RYSClaims.LOG.info("RYSClaims: чанков {}, команд {}, лишних билетов снято {}, билетов поставлено {}",
+        RYSClaims.LOG.info("RYSClaims: chunks {}, teams {}, extra tickets removed {}, tickets placed {}",
             saved.data().total(), saved.data().lands().size(), removed, changed);
     }
 
@@ -60,7 +60,7 @@ public final class ClaimsServer {
         if (w != null) {
             w.shutdown();
             try {
-                if (!w.awaitTermination(5, TimeUnit.SECONDS)) RYSClaims.LOG.warn("RYSClaims: журнал отказов не дописан за 5 секунд");
+                if (!w.awaitTermination(5, TimeUnit.SECONDS)) RYSClaims.LOG.warn("RYSClaims: deny log not flushed within 5 seconds");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -89,7 +89,7 @@ public final class ClaimsServer {
 
     public static ClaimService service() {
         ClaimService s = service;
-        if (s == null) throw new IllegalStateException("RYSClaims: сервер не запущен");
+        if (s == null) throw new IllegalStateException("RYSClaims: server is not running");
         return s;
     }
 

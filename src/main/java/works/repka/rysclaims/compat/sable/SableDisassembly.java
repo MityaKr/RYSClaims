@@ -113,7 +113,7 @@ public final class SableDisassembly {
             Protection.tellNear(level, be.getBlockPos(), ClaimService.Reason.DISASSEMBLE, owner, null);
             return true;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            RYSClaims.LOG.debug("[rysclaims] разборка Sable не проверена: {}", e.toString());
+            RYSClaims.LOG.debug("[rysclaims] Sable disassembly not checked: {}", e.toString());
             return false;
         }
     }
@@ -129,7 +129,7 @@ public final class SableDisassembly {
         UUID owner = blocked(sl, subLevel, box, null);
         if (owner == null) return false;
         Protection.tellNear(level, goal, ClaimService.Reason.DISASSEMBLE, owner, null);
-        RYSClaims.LOG.info("RYSClaims: разборка постройки Sable у {} отменена: под ней чужая земля", goal.toShortString());
+        RYSClaims.LOG.info("RYSClaims: Sable contraption disassembly by {} cancelled: foreign land underneath", goal.toShortString());
         return true;
     }
 

@@ -33,7 +33,7 @@ public final class SableAssembly {
             if (o == null || o.equals(home)) kept.add(p.immutable());
             else dropped++;
         }
-        if (dropped > 0) RYSClaims.LOG.info("RYSClaims: сборка постройки Sable у {} не взяла {} блоков с чужой земли", anchor.toShortString(), dropped);
+        if (dropped > 0) RYSClaims.LOG.info("RYSClaims: Sable contraption assembly by {} skipped {} blocks on foreign land", anchor.toShortString(), dropped);
         return kept;
     }
 

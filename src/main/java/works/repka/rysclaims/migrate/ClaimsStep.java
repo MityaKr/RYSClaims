@@ -51,12 +51,12 @@ public final class ClaimsStep implements Migrations.Step {
         if (world == null || !Files.isDirectory(world.resolve("ftbchunks"))) return false;
         // пока FTB Chunks держит землю, сами не переезжаем; исключение: запасной выпуск, где FTB Chunks остаётся картой
         if (c.isLoaded("ftbchunks") && !c.flag().bool("ftbChunksAsMap", false)) {
-            c.log("FTB Chunks ещё загружен: перенос земли только без него или с флагом ftbChunksAsMap");
+            c.log("FTB Chunks is still loaded: land migrates only without it or with the ftbChunksAsMap flag");
             return false;
         }
         if (!ClaimsServer.running()) return false;
         if (!ClaimsServer.service().data().isEmpty()) {
-            c.log("земля RYSClaims уже есть: перенос не нужен");
+            c.log("RYSClaims land already exists: migration not needed");
             return false;
         }
         return true;
@@ -69,20 +69,22 @@ public final class ClaimsStep implements Migrations.Step {
     @Override
     public Migrations.Report run(Migrations.Context c) throws Exception {
         Path world = c.worldDir();
-        if (world == null) throw new IllegalStateException("нет папки мира");
+        if (world == null) throw new IllegalStateException("no world folder");
         ClaimService service = ClaimsServer.service();
         FtbWorld w = FtbWorld.read(world, configs(c, world));
         boolean untouched = ServerConfig.untouched();
         FtbClaims.Plan plan = FtbClaims.plan(w, ServerConfig.snapshot(), untouched, Teams.api(), TeamsApi.get().teams());
         ClaimData live = service.data();
-        if (!live.isEmpty()) throw new IllegalStateException("земля RYSClaims уже есть, перенос затёр бы её");
+        if (!live.isEmpty()) throw new IllegalStateException("RYSClaims land already exists, the migration would overwrite it");
         live.replaceWith(plan.data);
         service.rebuildPlots();
         if (untouched) {
             ServerConfig.write(plan.settings);
-            plan.report.line("настройки FTB Chunks перенесены в rysclaims-server.toml" + (w.configFile == null ? " (файла FTB нет: наши по умолчанию)" : ""));
+            plan.report.line(w.configFile == null
+                ? Say.t("settings_moved_nofile", "FTB Chunks settings moved to rysclaims-server.toml (no FTB file: our defaults)")
+                : Say.t("settings_moved", "FTB Chunks settings moved to rysclaims-server.toml"));
         } else {
-            plan.report.line("rysclaims-server.toml уже правили: настройки FTB не переносились");
+            plan.report.line(Say.t("settings_kept", "rysclaims-server.toml was already edited: FTB settings were not migrated"));
         }
         live.defaults(ServerConfig.snapshot().defaultRights);
         ClaimsServer.saveNow();
@@ -90,25 +92,25 @@ public final class ClaimsStep implements Migrations.Step {
         // необратимое после записи: билеты прогрузки
         if (c.server() != null) Loader.sync(c.server(), service);
         if (c.isLoaded("ftbchunks")) {
-            plan.report.line("FTB Chunks загружен (ftbChunksAsMap): сними его прогрузку /ftbchunks admin unload_everything и включи disable_protection");
+            plan.report.line(Say.t("ftb_as_map", "FTB Chunks is loaded (ftbChunksAsMap): drop its chunk loading with /ftbchunks admin unload_everything and enable disable_protection"));
         }
         return plan.report;
     }
 
     @Override
     public Migrations.Report undo(Migrations.Context c) throws Exception {
-        if (!ClaimsServer.running()) throw new IllegalStateException("сервер земли не запущен");
+        if (!ClaimsServer.running()) throw new IllegalStateException("land server is not running");
         ClaimService service = ClaimsServer.service();
         ClaimData live = service.data();
         long at = c.data().has(EDITS) ? c.data().get(EDITS).getAsLong() : live.edits();
         if (live.edits() != at) {
-            throw new IllegalStateException("после переезда землю правили " + (live.edits() - at) + " раз: откат стёр бы новые клеймы игроков");
+            throw new IllegalStateException("land was edited " + (live.edits() - at) + " times after the migration: undo would erase the players' new claims");
         }
         int chunks = live.total();
         live.clear();
         ClaimsServer.saveNow();
         if (c.server() != null) Loader.sync(c.server(), service);
         return Migrations.Report.create().count("chunks", chunks)
-            .line("земля RYSClaims очищена; rysclaims-server.toml не откатывается, исходники FTB не трогались");
+            .line(Say.t("undo_done", "RYSClaims land cleared; rysclaims-server.toml is not rolled back, FTB sources were not touched"));
     }
 }

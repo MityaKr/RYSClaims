@@ -74,7 +74,7 @@ public final class RegionBytes {
     }
 
     public static byte[] encode(byte[] codes) {
-        if (codes.length != SIZE) throw new IllegalArgumentException("регион это " + SIZE + " байт");
+        if (codes.length != SIZE) throw new IllegalArgumentException("a region is " + SIZE + " bytes");
         boolean empty = true;
         for (byte b : codes) {
             if (b != 0) {
@@ -101,14 +101,14 @@ public final class RegionBytes {
     }
 
     public static byte[] decode(byte[] data) {
-        if (data.length == 0) throw new IllegalArgumentException("пустой регион");
+        if (data.length == 0) throw new IllegalArgumentException("empty region");
         byte[] codes = new byte[SIZE];
         switch (data[0]) {
             case EMPTY -> {
                 return codes;
             }
             case RAW -> {
-                if (data.length != SIZE + 1) throw new IllegalArgumentException("регион не той длины");
+                if (data.length != SIZE + 1) throw new IllegalArgumentException("region of the wrong length");
                 System.arraycopy(data, 1, codes, 0, SIZE);
                 return codes;
             }
@@ -118,13 +118,13 @@ public final class RegionBytes {
                 while (at[0] < data.length) {
                     byte b = data[at[0]++];
                     int run = readVarint(data, at);
-                    if (run <= 0 || filled + run > SIZE) throw new IllegalArgumentException("повтор за краем региона");
+                    if (run <= 0 || filled + run > SIZE) throw new IllegalArgumentException("run past the region edge");
                     for (int k = 0; k < run; k++) codes[filled++] = b;
                 }
-                if (filled != SIZE) throw new IllegalArgumentException("регион не заполнен");
+                if (filled != SIZE) throw new IllegalArgumentException("region not filled");
                 return codes;
             }
-            default -> throw new IllegalArgumentException("неизвестный вид региона " + data[0]);
+            default -> throw new IllegalArgumentException("unknown region kind " + data[0]);
         }
     }
 
@@ -139,7 +139,7 @@ public final class RegionBytes {
     private static int readVarint(byte[] data, int[] at) {
         int v = 0, shift = 0;
         while (true) {
-            if (at[0] >= data.length || shift > 28) throw new IllegalArgumentException("битое число");
+            if (at[0] >= data.length || shift > 28) throw new IllegalArgumentException("broken number");
             int b = data[at[0]++] & 0xFF;
             v |= (b & 0x7F) << shift;
             if ((b & 0x80) == 0) return v;

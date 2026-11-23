@@ -93,7 +93,7 @@ public final class Links {
             if (!Files.isRegularFile(file)) return Map.of();
             return parse(Files.readAllLines(file, StandardCharsets.UTF_8));
         } catch (IOException | RuntimeException | LinkageError e) {
-            LOG.warn("[rysclaims] не прочитан {}: все связки включены ({})", FILE, e.toString());
+            LOG.warn("[rysclaims] could not read {}: all links enabled ({})", FILE, e.toString());
             return Map.of();
         }
     }
@@ -155,7 +155,7 @@ public final class Links {
         for (String m : TARGETS.keySet()) {
             Set<String> left = new java.util.TreeSet<>(HANDLERS.getOrDefault(m, Set.of()));
             left.removeAll(INJECTED.getOrDefault(m, Set.of()));
-            if (!HANDLERS.containsKey(m)) left.add("(перехват не применён)");
+            if (!HANDLERS.containsKey(m)) left.add("(hook not applied)");
             if (!left.isEmpty()) out.put(m, left);
         }
         return out;
@@ -182,7 +182,7 @@ public final class Links {
                 continue;
             }
             if (!loaded.test(link.modId)) {
-                out.add(new State(link, Kind.DOWN, "мод не найден"));
+                out.add(new State(link, Kind.DOWN, "mod not found"));
                 continue;
             }
             List<String> notes = new ArrayList<>();
@@ -209,11 +209,11 @@ public final class Links {
                 }
                 if (total == 0 || done == 0) {
                     down = true;
-                    notes.add("цель не найдена");
+                    notes.add("target not found");
                 } else if (done < total) {
-                    notes.add("частично " + done + " из " + total);
+                    notes.add("partly " + done + " of " + total);
                 }
-                if (!missing.isEmpty()) notes.add("нет классов " + String.join(", ", missing));
+                if (!missing.isEmpty()) notes.add("no classes " + String.join(", ", missing));
             }
             java.util.function.Supplier<String> x = extra.get(link);
             if (x != null) {
@@ -233,11 +233,11 @@ public final class Links {
         Map<Kind, List<String>> by = new EnumMap<>(Kind.class);
         for (Kind k : Kind.values()) by.put(k, new ArrayList<>());
         for (State s : states) by.get(s.kind()).add(s.note().isEmpty() ? s.link().title : s.link().title + " (" + s.note() + ")");
-        return "[rysclaims] связки: встали " + list(by.get(Kind.UP)) + "; не встали " + list(by.get(Kind.DOWN)) + "; выключены "
+        return "[rysclaims] links: applied " + list(by.get(Kind.UP)) + "; not applied " + list(by.get(Kind.DOWN)) + "; disabled "
             + list(by.get(Kind.OFF));
     }
 
     private static String list(List<String> l) {
-        return l.isEmpty() ? "нет" : String.join(", ", l);
+        return l.isEmpty() ? "none" : String.join(", ", l);
     }
 }

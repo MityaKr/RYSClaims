@@ -38,7 +38,7 @@ public final class Feed {
         try {
             TeamsApi.get().post(team, new TeamsApi.Post(SOURCE, text, null, alert));
         } catch (RuntimeException e) {
-            RYSClaims.LOG.debug("RYSClaims: запись в ленту не ушла: {}", e.toString());
+            RYSClaims.LOG.debug("RYSClaims: feed entry not sent: {}", e.toString());
         }
     }
 

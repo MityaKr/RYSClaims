@@ -188,7 +188,7 @@ public final class Commands {
             .then(lit("force").then(net.minecraft.commands.Commands.argument("n", IntegerArgumentType.integer(-1_000_000, 1_000_000))
                 .executes(c -> playerBonus(c, false))))));
         node.then(lit("loaded").executes(Commands::loaded));
-        node.then(lit("server").executes(c -> serverLand(c, "Сервер"))
+        node.then(lit("server").executes(c -> serverLand(c, "Server"))
             .then(net.minecraft.commands.Commands.argument("name", StringArgumentType.greedyString())
                 .executes(c -> serverLand(c, StringArgumentType.getString(c, "name")))));
         node.then(lit("import").requires(s -> s.hasPermission(4))
@@ -232,7 +232,7 @@ public final class Commands {
     private static int serverLand(CommandContext<CommandSourceStack> c, String name) throws CommandSyntaxException {
         ClaimService s = service();
         TeamLand land = s.data().landOrCreate(ClaimService.SERVER_LAND);
-        land.legacyName = name.isBlank() ? "Сервер" : name.strip();
+        land.legacyName = name.isBlank() ? "Server" : name.strip();
         land.legacySource = "server";
         ClaimsServer.markDirty();
         ClaimSync.resendAll();

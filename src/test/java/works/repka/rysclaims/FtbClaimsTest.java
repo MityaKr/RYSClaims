@@ -159,7 +159,7 @@ class FtbClaimsTest {
         assertEquals("Spawn", server.legacyName);
         assertEquals("ftb-server", server.legacySource);
         assertEquals(SERVER, p.data.owner("minecraft:overworld", Chunks.pack(0, 0)));
-        assertTrue(p.report.lines().stream().anyMatch(l -> l.contains("срок FTB")), p.report.lines().toString());
+        assertTrue(p.report.lines().stream().anyMatch(l -> l.contains("FTB expiry")), p.report.lines().toString());
     }
 
     @Test

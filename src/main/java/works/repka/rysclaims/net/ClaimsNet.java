@@ -48,7 +48,7 @@ public final class ClaimsNet {
 
     private static long[] longs(FriendlyByteBuf buf, int max) {
         int n = buf.readVarInt();
-        if (n < 0 || n > max) throw new DecoderException("слишком длинный список: " + n);
+        if (n < 0 || n > max) throw new DecoderException("list too long: " + n);
         long[] out = new long[n];
         for (int i = 0; i < n; i++) out[i] = buf.readLong();
         return out;
@@ -75,7 +75,7 @@ public final class ClaimsNet {
 
     private static List<TeamEntry> readPalette(FriendlyByteBuf buf) {
         int n = buf.readVarInt();
-        if (n < 0 || n > 4096) throw new DecoderException("слишком большая палитра: " + n);
+        if (n < 0 || n > 4096) throw new DecoderException("palette too large: " + n);
         List<TeamEntry> out = new ArrayList<>(n);
         for (int i = 0; i < n; i++) out.add(TeamEntry.read(buf));
         return out;
@@ -177,7 +177,7 @@ public final class ClaimsNet {
             List<TeamEntry> p = readPalette(b);
             long[] c = longs(b, RegionBytes.SIZE * MAX_REGIONS);
             byte[] codes = b.readByteArray(c.length);
-            if (codes.length != c.length) throw new DecoderException("байтов не столько, сколько чанков");
+            if (codes.length != c.length) throw new DecoderException("byte count does not match chunk count");
             return new Diff(d, epoch, p, c, codes);
         }
 
@@ -206,7 +206,7 @@ public final class ClaimsNet {
         private static Access read(FriendlyByteBuf b) {
             int epoch = b.readVarInt();
             int n = b.readVarInt();
-            if (n < 0 || n > 4096) throw new DecoderException("слишком много команд: " + n);
+            if (n < 0 || n > 4096) throw new DecoderException("too many teams: " + n);
             List<UUID> t = new ArrayList<>(n);
             for (int i = 0; i < n; i++) t.add(b.readUUID());
             byte[] bits = b.readByteArray(n);
@@ -288,11 +288,11 @@ public final class ClaimsNet {
             UUID team = b.readUUID();
             int flags = b.readVarInt(), mask = b.readVarInt(), values = b.readVarInt(), vis = b.readVarInt(), pvp = b.readVarInt();
             int n = b.readVarInt();
-            if (n < 0 || n > 1024) throw new DecoderException("слишком много доверенных: " + n);
+            if (n < 0 || n > 1024) throw new DecoderException("too many trusted players: " + n);
             List<Trusted> trusted = new ArrayList<>(n);
             for (int i = 0; i < n; i++) trusted.add(new Trusted(b.readUUID(), b.readUtf(32)));
             int m = b.readVarInt();
-            if (m < 0 || m > 65536) throw new DecoderException("слишком много участков: " + m);
+            if (m < 0 || m > 65536) throw new DecoderException("too many plots: " + m);
             List<PlotInfo> plots = new ArrayList<>(m);
             for (int i = 0; i < m; i++) {
                 plots.add(new PlotInfo(b.readVarInt(), b.readUtf(64), dim(b), b.readVarInt(), b.readVarLong(), b.readUtf(32), longs(b, MAX_CHUNKS)));
@@ -378,7 +378,7 @@ public final class ClaimsNet {
         private static LogPage read(FriendlyByteBuf b) {
             boolean feed = b.readBoolean(), toast = b.readBoolean(), edit = b.readBoolean();
             int days = b.readVarInt(), n = b.readVarInt();
-            if (n < 0 || n > MAX) throw new DecoderException("слишком длинный журнал: " + n);
+            if (n < 0 || n > MAX) throw new DecoderException("log too long: " + n);
             List<LogLine> lines = new ArrayList<>(n);
             for (int i = 0; i < n; i++) lines.add(LogLine.read(b));
             return new LogPage(feed, toast, edit, days, lines);
@@ -480,14 +480,14 @@ public final class ClaimsNet {
 
         private static AdminState read(FriendlyByteBuf b) {
             int n = b.readVarInt();
-            if (n < 0 || n > 256) throw new DecoderException("слишком много настроек: " + n);
+            if (n < 0 || n > 256) throw new DecoderException("too many settings: " + n);
             List<String> k = new ArrayList<>(n), v = new ArrayList<>(n);
             for (int i = 0; i < n; i++) {
                 k.add(b.readUtf(64));
                 v.add(b.readUtf(256));
             }
             int m = b.readVarInt();
-            if (m < 0 || m > 4096) throw new DecoderException("слишком много команд: " + m);
+            if (m < 0 || m > 4096) throw new DecoderException("too many teams: " + m);
             List<TeamRow> teams = new ArrayList<>(m);
             for (int i = 0; i < m; i++) teams.add(TeamRow.read(b));
             return new AdminState(k, v, teams, b.readBoolean(), b.readVarInt(), b.readBoolean());

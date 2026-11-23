@@ -40,7 +40,7 @@ public final class SableLand {
                 project = type.getMethod("projectOutOfSubLevel", Level.class, Position.class);
                 uniqueId = Class.forName("dev.ryanhcode.sable.companion.SubLevelAccess").getMethod("getUniqueId");
                 companion = inst;
-                RYSClaims.LOG.info("RYSClaims: Sable найден, блоки летающих построек судятся по земле под ними");
+                RYSClaims.LOG.info("RYSClaims: Sable found, blocks of flying contraptions are judged by the land below them");
             } catch (ReflectiveOperationException | LinkageError e) {
                 companion = null;
             }

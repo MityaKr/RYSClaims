@@ -35,7 +35,7 @@ public final class Admin {
             case "setting" -> {
                 if (ServerConfig.set(e.key(), e.value())) {
                     ClaimsServer.settingsChanged();
-                    works.repka.rysclaims.RYSClaims.LOG.info("RYSClaims: {} поменял настройку {} = {}", player.getGameProfile().getName(), e.key(), e.value());
+                    works.repka.rysclaims.RYSClaims.LOG.info("RYSClaims: {} changed setting {} = {}", player.getGameProfile().getName(), e.key(), e.value());
                 } else {
                     player.sendSystemMessage(Msg.t("admin.bad_value", "The server did not accept %s = %s", e.key(), e.value()));
                 }

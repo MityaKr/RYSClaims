@@ -58,7 +58,7 @@ public final class CreateDisassembly {
                 return true;
             }
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            RYSClaims.LOG.debug("[rysclaims] разборка Create не проверена: {}", e.toString());
+            RYSClaims.LOG.debug("[rysclaims] Create disassembly not checked: {}", e.toString());
         }
         return false;
     }
@@ -96,7 +96,7 @@ public final class CreateDisassembly {
                     + (from == null ? "" : " @" + from.getX() + " " + from.getY() + " " + from.getZ()));
             }
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            RYSClaims.LOG.debug("[rysclaims] разборка Create не проверена: {}", e.toString());
+            RYSClaims.LOG.debug("[rysclaims] Create disassembly not checked: {}", e.toString());
         }
         synchronized (MEMO) {
             MEMO.put(entity, new Memo(now, owner));

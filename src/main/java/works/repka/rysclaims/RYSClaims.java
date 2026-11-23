@@ -86,6 +86,6 @@ public final class RYSClaims {
         });
         NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent e) -> Commands.register(e.getDispatcher()));
         ClaimsApi.provide(new ClaimsApiImpl());
-        LOG.info("RYSClaims загружен");
+        LOG.info("RYSClaims loaded");
     }
 }
