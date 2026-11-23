@@ -1,5 +1,11 @@
 # Изменения RYSClaims
 
+## 0.2.0 (23.11.2026, номер версии выровнен с семьёй)
+
+- Номер версии выровнен с семьёй RYS (линия 0.2.x, как у RYSQuests, RYSTeams, RYSMap и RYSHelm): 0.0.58 становится 0.2.0. Код тот же, что в 0.0.58: для игроков, настроек и данных мира ничего не меняется, формат `rysclaims.dat` (версия 1) и сетевой канал (версия 2) прежние. Файл мода теперь называется `rysclaims-neoforge-1.21.1-0.2.0.jar`.
+- Описание мода в списке модов переписано: что мод делает сам (приват по чанкам, прогрузка, права по ролям, защита от машин, перенос из FTB Chunks).
+- EN: Version number aligned with the RYS family (0.2.x line): 0.0.58 becomes 0.2.0. Same code as 0.0.58, nothing changes for players, server settings or world data; the `rysclaims.dat` format (v1) and the network channel (v2) stay the same. The jar is now `rysclaims-neoforge-1.21.1-0.2.0.jar`. The mod list description now says what the mod does on its own.
+
 ## 0.0.58 (20.11.2026, решения автора по умолчаниям привата)
 
 - GameTest повторяемы в одном мире (jar не менялся): `migrateclaims` переезжает в своей папке мира, отметка «сделано» прошлого прогона ему больше не мешает; `placeblockformachines` убирает доску прошлого прогона и свою; `commandsandtickets` убирает землю сразу, а не освобождением с отсчётом. `sharedFakeUsesTickingMachine` проверяет, что перехват `BlockEntityTickMixin` встал в обёртку тика блок-сущности. Падения были от старого мира `run-server/world`, код 0.0.57 и 0.0.58 в свежем мире проходил все тесты.

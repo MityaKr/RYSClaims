@@ -14,7 +14,7 @@ version = "${mod_version}"
 displayName = "${mod_name}"
 authors = "${mod_authors}"
 description = '''
-Land for teams: claims, force loading and protection that know RYSTeams roles. Replaces FTB Chunks claims.
+Chunk claims for teams: claim land, keep it force-loaded and decide who may do what by RYSTeams roles, allies and trusted players. Protection covers players, explosions, mobs and other mods' machines; land and rights can be imported from FTB Chunks.
 '''
 
 [[dependencies.${mod_id}]]
