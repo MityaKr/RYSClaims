@@ -1,5 +1,13 @@
 # Изменения RYSClaims
 
+## 0.2.1 (23.11.2026): английский интерфейс к публикации
+
+- Ядро RYSCore 1.17.1 (подписи клавиш и кнопок мыши по языку игры).
+- Отчёт переезда с FTB Chunks идёт ключами языка с английским запасом (`rysclaims.migrate.*`, en и ru); сервер без языковых файлов пишет по-английски.
+- Земля сервера по умолчанию называется «Server» (`/claims admin server`). Уже созданную землю это не переименовывает.
+- Логи и сообщения об ошибках по-английски.
+- EN: RYSCore 1.17.1. The FTB Chunks migration report uses lang keys with an English fallback. The default server land name is "Server" (an existing land is not renamed). Logs and exceptions are in English.
+
 ## 0.2.0 (23.11.2026, номер версии выровнен с семьёй)
 
 - Номер версии выровнен с семьёй RYS (линия 0.2.x, как у RYSQuests, RYSTeams, RYSMap и RYSHelm): 0.0.58 становится 0.2.0. Код тот же, что в 0.0.58: для игроков, настроек и данных мира ничего не меняется, формат `rysclaims.dat` (версия 1) и сетевой канал (версия 2) прежние. Файл мода теперь называется `rysclaims-neoforge-1.21.1-0.2.0.jar`.
