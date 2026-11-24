@@ -1,5 +1,10 @@
 # Изменения RYSClaims
 
+## 0.2.4 (24.11.2026)
+
+- Ядро RYSCore 1.17.3: поля ввода в теме Vanilla Refined рисуются в кегле подписей, а не крупным шрифтом игры; курсор виден на чёрном поле.
+- EN: RYSCore 1.17.3: text fields in the Vanilla Refined theme use the size of the labels instead of the game's large font; the caret shows on the black field.
+
 ## 0.2.3 (24.11.2026)
 
 - Иконка мода (витраж «Роза») в списке модов игры; файл иконки для страницы CurseForge лежит в `docs/icon-400.png`.
