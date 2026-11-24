@@ -1,38 +1,122 @@
 # RYSClaims
 
-Земля команд для семьи модов RYS: занять чанки, включить прогрузку, задать права. Команда берётся из RYSTeams; без него земля личная. Требует RYSCore (вложен в jar).
+*Русская версия ниже: [по-русски](#по-русски).*
 
-Сейчас готовы хранилище, лимиты с личными добавками, прогрузка, команды (этап З1), защита (З2), переезд с FTB Chunks (З3), совместимость с Create, Sable и машинами модов (З5) и клиент (З4): окно земли, слой на карте RYSMap, отказ замком у прицела.
+![The Land window with the chunk grid](docs/screenshot.png)
 
-## Окно земли
+**Chunk-based land claims.** A team claims land, keeps it force-loaded and decides who can do what. Protection stops not only players but also other mods' machines. Land from FTB Chunks moves over with its force-loading, rights and limits, and the import can be rolled back until the land has been edited.
 
-Открывается кнопкой «Земля» в панели семьи (инвентарь), пунктом «Занять чанк» в меню карты RYSMap по правой кнопке или клавишей «Земля команды» (по умолчанию не назначена, как и «Занять чанк под ногами»). Подраздел «Сетка»: чанки вокруг игрока поверх карты (без RYSMap на тёмном полотне), выделение мышью, три инструмента (занять, прогрузка, освободить с отсчётом 30 секунд и «Оставить»), лимиты. Подраздел «Права»: четыре действия на три столбца (команда, союзники, все), три готовых набора. В карте RYSMap: слой «Участки», подсказка чанка (чья земля, прогрузка, что можно тебе), строка «чья земля» под миникартой.
+## Features
 
-## Команды
+- the Land window with a chunk grid
+- chunk force-loading
+- rights by role, for allies and for trusted players
+- protection from players, explosions, mobs and foreign machines
+- plots with their own rights, transfer and lease
+- a log of attempts on your land
+- limits and server rules in the operator window
 
-| Команда | Что делает |
-|---|---|
-| `/claims claim [радиус]` | занять чанк под ногами или квадрат вокруг (радиус до 15) |
-| `/claims release [радиус]` | освободить; 30 секунд земля ещё защищена, `/claims keep` отменяет |
-| `/claims load [радиус]`, `/claims unload [радиус]` | включить и выключить прогрузку |
-| `/claims loadmode online\|always` | прогрузка, пока кто-то в сети, или всегда (если сервер разрешил) |
-| `/claims info` | чья земля под ногами и что можно здесь |
-| `/claims list` | земля команды, лимиты, куски по измерениям |
-| `/claims log [страница]` | журнал отказов: кто и что пытался сделать на земле команды |
-| `/claims trust <игрок>`, `/claims untrust <игрок>` | доверенные игроки (права столбца «Союзники») |
-| `/claims rights`, `rights preset team\|team_and_allies\|open`, `rights <действие> <столбец> on\|off` | права доступа |
-| `/claims flag <имя> on\|off`, `flag visibility all\|allies\|team` | переключатели команды |
-| `/claims admin bypass` | режим оператора: защита снята |
-| `/claims admin for <команда> claim\|release\|load\|unload\|keep\|list [радиус]` | правка чужой земли; команда это UUID, точное имя команды, ник игрока (его команда) или имя команды без учёта регистра, именно в этом порядке; имя с пробелами или по-русски в кавычках |
-| `/claims admin limit <команда> claims\|force <n>` | добавка команде |
-| `/claims admin bonus <игрок> claims\|force <n>` | личная добавка игрока |
-| `/claims admin loaded` | прогрузка по командам |
-| `/claims admin import ftb`, `/claims admin import undo` | перенос земли из FTB Chunks и его откат (уровень 4; то же, что `/rys migrate run claims` и `undo claims`) |
+The same actions are available as `/claims` commands. An operator does not bypass claims until they turn on `/claims admin bypass`.
 
-Раздел `admin` требует уровня оператора 2. Занимать, прогружать и менять права можно по таблице прав RYSTeams (строки «Занимать и освобождать землю», «Включать прогрузку», «Менять права на земле»).
+## Requirements
 
-Настройки сервера: `config/rysclaims-server.toml`.
+- Minecraft 1.21.1, NeoForge 21.1.x, client and server.
+- No other mods required.
+- Optional: RYSTeams (teams, roles and alliances), RYSMap (land on the map and minimap).
+- Languages: English and Russian.
 
-## Переезд с FTB Chunks
+## Download and help
 
-В сборке RepYS земля переезжает сама при первом запуске, если сборка положила флаг `config/ryscore/migrate.json` с шагом `claims`, а FTB Chunks уже убран. Переносятся чанки, прогрузка, права, переключатели, союзники (доверенными), личные добавки к лимиту; лимит каждой команды не меньше, чем был в FTB. Исходные файлы FTB не меняются, копию делает RYSCore, отчёт лежит в `world/rys/migrate-report.txt`.
+- Download: [CurseForge](https://www.curseforge.com/minecraft/mc-mods/rysclaims).
+- Help, ideas and questions: [Discord](https://discord.gg/Tqgy7acmyd).
+- Bugs: [GitHub Issues](https://github.com/MityaKr/RYSClaims/issues).
+
+## Documentation
+
+- [docs/data.md](docs/data.md): where the land is stored, limits, force-loading, rights and the import from FTB Chunks.
+
+The documents are in Russian.
+
+## The RYS family
+
+RYSClaims is part of the RYS family of mods: one style, shared themes and settings. Each mod works on its own, and together they complement each other.
+
+- [RYSQuests](https://www.curseforge.com/minecraft/mc-mods/rysquests), a quest book with guides and a shop.
+- [RYSIndex](https://www.curseforge.com/minecraft/mc-mods/rysindex), a recipe viewer with crafting trees.
+- [RYSMap](https://www.curseforge.com/minecraft/mc-mods/rysmap), a world map and minimap.
+- [RYSTeams](https://www.curseforge.com/minecraft/mc-mods/rysteams), player teams with roles and alliances.
+- [RYSHelm](https://www.curseforge.com/minecraft/mc-mods/ryshelm), the Server window for admins.
+
+## Building from source
+
+You need Java 21. The build takes the family's shared code from the [RYSCore](https://github.com/MityaKr/RYSCore) repository, which must sit next to this one and be published to its local `repo/` folder first:
+
+```
+git clone https://github.com/MityaKr/RYSCore
+git clone https://github.com/MityaKr/RYSClaims
+cd RYSCore && ./gradlew publish
+cd ../RYSClaims && ./gradlew build
+```
+
+The jar is in `build/libs`.
+
+## License
+
+The code is under [MPL-2.0](LICENSE). The graphics and the RYS name remain with the author, see [NOTICE.md](NOTICE.md). You can include the mod in any modpack without asking for permission.
+
+Author: MityaYS, RepkaWorks.
+
+---
+
+## По-русски
+
+**Приват земли по чанкам.** Команда занимает землю, включает ей прогрузку и решает, кому что можно. Защита держит не только игроков, но и машины других модов. Земля из FTB Chunks переезжает вместе с прогрузкой, правами и лимитами, а перенос можно откатить, пока землю не начали править.
+
+### Возможности
+
+- окно «Земля» с сеткой чанков
+- прогрузка чанков
+- права по ролям, союзникам и доверенным игрокам
+- защита от игроков, взрывов, мобов и чужих машин
+- участки со своими правами, передачей и арендой
+- журнал попыток на твоей земле
+- лимиты и правила сервера в окне оператора
+
+Те же действия есть командами `/claims`. Оператор не обходит приват, пока сам не включит `/claims admin bypass`.
+
+### Требования
+
+- Minecraft 1.21.1, NeoForge 21.1.x, клиент и сервер.
+- Других модов не требует.
+- По желанию: RYSTeams (команды, роли и союзы), RYSMap (земля на карте и миникарте).
+- Языки: русский и английский.
+
+### Скачать и спросить
+
+- Скачать: [CurseForge](https://www.curseforge.com/minecraft/mc-mods/rysclaims).
+- Помощь, идеи и вопросы: [Discord](https://discord.gg/Tqgy7acmyd).
+- Баги: [GitHub Issues](https://github.com/MityaKr/RYSClaims/issues).
+
+### Документация
+
+- [docs/data.md](docs/data.md): где хранится земля, лимиты, прогрузка, права и перенос из FTB Chunks.
+
+### Семья RYS
+
+RYSClaims входит в семью модов RYS: один стиль, общие темы и настройки. Каждый мод работает сам по себе, а вместе они дополняют друг друга.
+
+- [RYSQuests](https://www.curseforge.com/minecraft/mc-mods/rysquests), книга квестов с гайдами и магазином.
+- [RYSIndex](https://www.curseforge.com/minecraft/mc-mods/rysindex), справочник рецептов с деревом крафта.
+- [RYSMap](https://www.curseforge.com/minecraft/mc-mods/rysmap), карта мира и миникарта.
+- [RYSTeams](https://www.curseforge.com/minecraft/mc-mods/rysteams), команды игроков с ролями и союзами.
+- [RYSHelm](https://www.curseforge.com/minecraft/mc-mods/ryshelm), окно «Сервер» для администраторов.
+
+### Сборка из исходников
+
+Нужна Java 21. Общий код семьи сборка берёт из репозитория [RYSCore](https://github.com/MityaKr/RYSCore): он должен лежать рядом с этим и сначала выложиться в свою папку `repo/` командой `gradlew publish` (команды выше). Готовый jar лежит в `build/libs`.
+
+### Лицензия
+
+Код под [MPL-2.0](LICENSE), графика и имя RYS остаются за автором, подробности в [NOTICE.md](NOTICE.md). Мод можно включать в любую сборку без отдельного разрешения.
+
+Автор: MityaYS, RepkaWorks.
