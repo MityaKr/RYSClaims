@@ -270,15 +270,15 @@ public final class LandView {
             pages = java.util.Arrays.copyOfRange(pages, 1, pages.length);
             labels = java.util.Arrays.copyOfRange(labels, 1, labels.length);
         }
-        float sum = 0;
-        for (String l : labels) sum += Draw.labelWidth(l, 12.5f, Weight.MEDIUM);
-        int w = (int) Math.ceil(sum) + 12 * labels.length + 2 * (labels.length - 1) + 4;
-        if (t.beveled()) Draw.bevel(g, x - 2, y - 2, w, 18, t.c("sidebar.bg"), t.c("panel.bevel.dark"), t.c("panel.bevel.light"), 1, true);
-        else Draw.roundBox(g, x - 2, y - 2, w, 18, 5, t.c("sidebar.bg"), t.c("panel.border"));
+        // сегментный переключатель ядра: равный отступ выбранной страницы от подложки со всех сторон (замечание автора 24.11)
+        java.util.List<Kit.Segment> items = new java.util.ArrayList<>(labels.length);
+        int selected = -1;
         for (int i = 0; i < pages.length; i++) {
-            Page p = pages[i];
-            x += Kit.pill(g, t, hits, x, y, labels[i], page == p, mx, my, () -> setPage(p)) + 2;
+            items.add(Kit.Segment.of(labels[i]));
+            if (pages[i] == page) selected = i;
         }
+        Page[] shown = pages;
+        Kit.segmented(g, t, hits, x - 2, y - 2, 18, items, selected, mx, my, i -> setPage(shown[i]));
     }
 
     private void setPage(Page p) {

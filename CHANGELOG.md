@@ -1,5 +1,11 @@
 # Изменения RYSClaims
 
+## 0.2.5 (24.11.2026)
+
+- Ядро RYSCore 1.18.0: в теме Vanilla Refined подсказки светлые, в цвет окна, вместо почти чёрных с фиолетовой рамкой; у переключателей с вариантами («Тема», «Размер интерфейса») выбранный вариант стоит с равным отступом со всех сторон на любом масштабе.
+- Переключатель страниц окна привата на общем переключателе ядра.
+- EN: RYSCore 1.18.0: tooltips in the Vanilla Refined theme are light, in the window's colours, instead of near-black with a purple border; the selected option of a segmented switch ("Theme", "Interface size") sits with an equal inset on all sides at any scale. The land window's page switch uses the core's segmented switch.
+
 ## 0.2.4 (24.11.2026)
 
 - Ядро RYSCore 1.17.3: поля ввода в теме Vanilla Refined рисуются в кегле подписей, а не крупным шрифтом игры; курсор виден на чёрном поле.
