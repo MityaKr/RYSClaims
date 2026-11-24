@@ -207,7 +207,8 @@ public final class LandView {
         switch (page) {
             case GRID -> {
                 canvas(g, t, slate(), h, mx, my);
-                panel(g, t, h, mx, my);
+                // список измерений стоит в правом верхнем углу панели, в ряду заголовка: заголовок кончается перед ним
+                panel(g, t, h, dimDropLeft() - 6, mx, my);
                 dimDropdown(g, t, mx, my);
                 dimList(g, t, mx, my);
             }
@@ -644,7 +645,8 @@ public final class LandView {
         return dx * dx + dz * dz;
     }
 
-    private void panel(GuiGraphics g, Theme t, ClaimsNet.Hello h, int mx, int my) {
+    /** @param titleEnd правый край заголовка (команда в кавычках): длинное имя обрезается многоточием, полное в подсказке */
+    private void panel(GuiGraphics g, Theme t, ClaimsNet.Hello h, int titleEnd, int mx, int my) {
         int top = wy + HEADER, bottom = wy + wh, x = px0 + 9, w = PANEL - 18;
         Draw.rect(g, px0, top, 1, bottom - top - 1, t.c("panel.border"));
         Sel s = analyse(h);
@@ -659,8 +661,9 @@ public final class LandView {
         Draw.round(g, x, y, 22, 22, 5, h.color());
         Icons.draw(g, Icons.Shape.SHIELD, x + 5, y + 5, 12, 0xFFFFFFFF);
         String title = h.solo() ? Words.t("panel.title.solo") : Words.t("panel.title", h.name());
-        Draw.label(g, Draw.ellipsize(title, w - 28, 13.5f, Weight.SEMIBOLD), x + 28, y + 5, 13.5f, Weight.SEMIBOLD, t.c("text.primary"));
-        if (title.length() > 0 && Draw.labelWidth(title, 13.5f, Weight.SEMIBOLD) > w - 28 && Kit.over(mx, my, x + 28, y, w - 28, 10)) tip = List.of(title);
+        int titleRoom = Math.max(20, Math.min(w - 28, titleEnd - (x + 28)));
+        Draw.label(g, Draw.ellipsize(title, titleRoom, 13.5f, Weight.SEMIBOLD), x + 28, y + 5, 13.5f, Weight.SEMIBOLD, t.c("text.primary"));
+        if (title.length() > 0 && Draw.labelWidth(title, 13.5f, Weight.SEMIBOLD) > titleRoom && Kit.over(mx, my, x + 28, y, titleRoom, 10)) tip = List.of(title);
         String role = h.solo() ? Words.t("panel.role.solo")
             : Words.t("panel.role", Words.role(h.role()), Words.t(h.canClaim() ? "panel.role.can" : "panel.role.cannot"));
         float ly = y + 14;
@@ -1297,10 +1300,13 @@ public final class LandView {
         }
     }
 
+    /** Левый край кнопки списка измерений (её ширина по подписи). */
+    private int dimDropLeft() {
+        return wx + ww - 10 - Kit.dropdownWidth(dimName(dim), 150);
+    }
+
     private void dimDropdown(GuiGraphics g, Theme t, int mx, int my) {
-        String label = dimName(dim);
-        int w = Kit.dropdownWidth(label, 150);
-        Kit.dropdown(g, t, hits, dimDrop, wx + ww - 10 - w, wy + HEADER + 6, 150, label, false, mx, my);
+        Kit.dropdown(g, t, hits, dimDrop, dimDropLeft(), wy + HEADER + 6, 150, dimName(dim), false, mx, my);
     }
 
     private void dimList(GuiGraphics g, Theme t, int mx, int my) {
@@ -2235,7 +2241,7 @@ public final class LandView {
             Draw.label(g, Draw.ellipsize(text, w - 16, 12, Weight.REGULAR), x + 8, y + 14, 12, Weight.REGULAR, t.c("text.muted"));
             return;
         }
-        panel(g, t, h, mx, my);
+        panel(g, t, h, Integer.MAX_VALUE, mx, my);
         if (tip != null) Kit.tooltip(g, t, tip, mx, my);
     }
 
